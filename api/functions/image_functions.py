@@ -30,6 +30,8 @@ class ImageFunctions:
         Never modify or stylize the person’s face or body.
         Only adjust lighting and shadows to make the combination realistic.
         The final result must look like the person in the first image is realistically wearing the clothing from the second image.
+        Be careful with the preserving hidden body parts in the first image.
+        Be careful with the preserving the body-logic when new clothing is dressed, you can change to show legs if clothing is shorts for example.
         """
 
         # Create parts list using Blob format (matching sample code)

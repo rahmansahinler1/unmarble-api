@@ -27,11 +27,11 @@ class ImageFunctions:
         In the second image, there is a clothing item which may or may not be worn by a model.
         Extract the clothing item from the second image (if it is worn by a model, remove the model completely and keep only the clothing).
         Place the clothing naturally on the person in the first image, preserving body proportions, posture, and all human features exactly as in the original.
+        You can just adapt the clothing logic, for example, if image 1 wears pants, and clothing item in image 2 is skirt, creation needs to show legs not pants after skirt.
         Never modify or stylize the person’s face or body.
-        Only adjust lighting and shadows to make the combination realistic.
+        Only adjust lighting and shadows to make the combination realistic. Do not change any aspects of the clothing item in image 2.
         The final result must look like the person in the first image is realistically wearing the clothing from the second image.
         Be careful with the preserving hidden body parts in the first image.
-        Be careful with the preserving the body-logic when new clothing is dressed, you can change to show legs if clothing is shorts for example.
         """
 
         # Create parts list using Blob format (matching sample code)

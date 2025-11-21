@@ -23,15 +23,77 @@ class ImageFunctions:
 
     def generate_image(self, yourself_image_base64, clothing_image_base64):
         main_prompt = f"""
-        Combine two images seamlessly. In the first image, there is a person.
-        In the second image, there is a clothing item which may or may not be worn by a model.
-        Extract the clothing item from the second image (if it is worn by a model, remove the model completely and keep only the clothing).
-        Place the clothing naturally on the person in the first image, preserving body proportions, posture, and all human features exactly as in the original.
-        You can just adapt the clothing logic, for example, if image 1 wears pants, and clothing item in image 2 is skirt, creation needs to show legs not pants after skirt.
-        Never modify or stylize the person’s face or body.
-        Only adjust lighting and shadows to make the combination realistic. Do not change any aspects of the clothing item in image 2.
-        The final result must look like the person in the first image is realistically wearing the clothing from the second image.
-        Be careful with the preserving hidden body parts in the first image.
+        CLOTHING VIRTUAL TRY-ON - PRECISE IMPLEMENTATION GUIDE
+
+        PRIMARY OBJECTIVE:
+        Combine two images to create a realistic virtual try-on result. Image 1 contains a person. Image 2 contains a clothing item (either standalone or worn by a model).
+
+        CRITICAL RULES - CLOTHING ITEM PRESERVATION:
+        1. Extract the clothing item from Image 2 with ABSOLUTE PRECISION
+        2. The clothing item must remain COMPLETELY UNCHANGED - no additions, modifications, or alterations to its:
+        - Original design and structure
+        - Fabric patterns and textures
+        - Colors and color placement
+        - Decorative elements (buttons, zippers, pockets, embroidery)
+        - Cut and silhouette
+        - Any design details
+        3. If Image 2 shows clothing on a model, extract ONLY the clothing item - completely remove the model
+        4. Do not add any design elements that don't exist in Image 2, even if they seem logical or complementary
+
+        CLOTHING LAYER LOGIC:
+        1. Analyze what the person in Image 1 is currently wearing
+        2. Apply intelligent clothing replacement based on garment type:
+        - If Image 2 is a TOP (shirt, blouse, sweater, jacket): Replace the existing top, keep bottom garments visible
+        - If Image 2 is a BOTTOM (pants, skirt, shorts): Remove existing bottom garments and show appropriate body parts (legs for skirts/shorts, covered legs for pants)
+        - If Image 2 is a DRESS: Replace both top and bottom with the dress, show appropriate body parts
+        - If Image 2 is OUTERWEAR (coat, jacket): Layer over existing clothing or replace top layer
+        3. NEVER layer bottoms over existing bottoms (e.g., skirt over jeans is incorrect - remove jeans and show legs)
+        4. NEVER keep incompatible clothing visible beneath (e.g., if adding a dress, don't show pants underneath)
+
+        HANDLING UNREALISTIC COMBINATIONS:
+        When the clothing item from Image 2 creates an incomplete outfit with what's in Image 1:
+        1. If Image 2 is PANTS/SHORTS/SKIRT and Image 1 has a full dress:
+        - Replace the dress bottom with the pants/skirt/shorts
+        - Generate a neutral, plain black or white basic fitted t-shirt for the top
+        - Ensure the t-shirt is simple, solid color, no patterns or logos
+        2. If Image 2 is a TOP and Image 1 has a full dress:
+        - Replace the dress top with the new top
+        - Generate neutral, plain black or dark fitted pants/leggings for the bottom
+        3. Default neutral items should be:
+        - Solid colors (black, white, or neutral tones)
+        - Simple, fitted silhouettes
+        - No patterns, logos, or decorative elements
+        - Appropriate for the style context
+
+        BODY AND FACE PRESERVATION:
+        1. Preserve the person's face, body proportions, posture, and all human features EXACTLY as in Image 1
+        2. NEVER modify, stylize, or alter:
+        - Facial features, expressions, or skin tone
+        - Body shape or proportions
+        - Hair style or color
+        - Visible body parts (arms, legs, neck)
+        3. Maintain all hidden body parts correctly (e.g., legs under full-length skirts, torso under jackets)
+
+        LIGHTING AND INTEGRATION:
+        1. Adjust ONLY lighting and shadows to integrate the clothing naturally with the person
+        2. Match the lighting direction, intensity, and color temperature from Image 1
+        3. Add realistic shadows, wrinkles, and fabric draping that follow the person's body contours
+        4. Ensure the clothing appears to naturally wrap around and fit the person's body shape
+
+        NEGATIVE CONSTRAINTS (What to AVOID):
+        - Adding clothing elements not present in Image 2 (extra pockets, buttons, patterns, trim, accessories)
+        - Changing the clothing's original colors, patterns, or design
+        - Modifying the person's body, face, or physical features
+        - Creating unrealistic clothing layering (visible incompatible garments underneath)
+        - Generating low-quality results with: blurry details, distorted proportions, unnatural lighting, poor fabric draping, floating garments, disconnected clothing parts, anatomical errors
+
+        FINAL OUTPUT REQUIREMENTS:
+        The result must appear as if the person from Image 1 is naturally wearing the exact clothing item from Image 2, with:
+        - Photorealistic quality and proper integration
+        - Correct clothing logic and layering
+        - Preserved human features and proportions
+        - Natural lighting and shadows
+        - No modifications to the original clothing design
         """
 
         # Create parts list using Blob format (matching sample code)

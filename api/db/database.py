@@ -568,3 +568,45 @@ class Database:
         except Exception as e:
             self.conn.rollback()
             raise e
+
+    def update_premium(
+            self,
+            user_email,
+            customer_id,
+            receipt_url
+        ):
+        query = """
+        UPDATE users
+        SET user_type = 'premium',
+            uploads_left = 20,
+            generations_left = 20,
+            recents_left = 20,
+            last_payment_at = CURRENT_TIMESTAMP,
+            lemon_squeezy_customer_id = %s,
+            receipt_url = %s
+        WHERE user_email = %s
+        RETURNING user_id, user_name, user_surname
+        """
+        try:
+            self.cursor.execute(query, (customer_id, receipt_url, user_email))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"User with email {user_email} not found")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "user_type": "premium",
+                "uploads_left": 20,
+                "generations_left": 20,
+                "recents_left": 20
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e

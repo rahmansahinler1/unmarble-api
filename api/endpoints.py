@@ -7,6 +7,8 @@ import logging
 import requests
 import jwt
 import os
+import hmac
+import hashlib
 from datetime import datetime, timedelta, timezone
 from .db.database import Database
 from .functions.image_functions import ImageFunctions
@@ -447,3 +449,71 @@ def generate_jwt_token(user_id: str):
 
     token = jwt.encode(payload, secret_key, algorithm="HS256")
     return token
+
+@router.post("/webhooks/create_subscription")
+async def create_subscription_webhook(request: Request):
+    try:
+        body = await request.body()
+        payload = await request.json()
+        signature = request.headers.get("X-Signature")
+
+        # Signature verification
+        webhook_secret = os.getenv("LEMON_SQUEEZY_SECRET_KEY")
+
+        if not webhook_secret:
+            logger.error("create_subscription_webhook | LEMON_SQUEEZY_SECRET_KEY not configured")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        expected_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        if not signature:
+            logger.warning("create_subscription_webhook | Missing X-Signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("create_subscription_webhook | Invalid signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        # Check event type
+        event_name = payload.get("meta", {}).get("event_name")
+        if event_name != "subscription_created":
+            return JSONResponse(
+                status_code=200,
+                content={"message": f"Event {event_name} ignored"}
+            )
+
+        # Extract subscription data
+        data = payload.get("data", {}).get("attributes", {})
+        customer_id = data.get("customer_id")
+        customer_email = data.get("user_email")
+        urls = data.get("urls", {})
+        receipt_url = urls.get("receipt")
+
+        if not customer_email:
+            logger.error("create_subscription_webhook | Missing user_email in payload")
+            raise HTTPException(status_code=400, detail="Missing user_email")
+
+        # Update user subscription
+        with Database() as db:
+            result = db.update_premium(
+                user_email=customer_email,
+                customer_id=customer_id,
+                receipt_url=receipt_url
+            )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Subscription created successfully",
+                "user_id": result["user_id"],
+                "user_type": result["user_type"]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"create_subscription_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

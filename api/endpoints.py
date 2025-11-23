@@ -242,14 +242,14 @@ async def design_image(request: Request, user_id: str = Depends(verify_jwt_token
         clothing_image_id = data.get("clothing_image_id")
 
         with Database() as db:
-            yourself_image_bytes = db.get_image(
+            yourself_image_bytes = bytes(db.get_image(
                 user_id,
                 yourself_image_id
-                )
-            clothing_image_bytes = db.get_image(
+                ))
+            clothing_image_bytes = bytes(db.get_image(
                 user_id,
                 clothing_image_id
-                )
+                ))
 
         designed_image_bytes = imgf.design_image(
             yourself_image_bytes,

@@ -163,16 +163,16 @@ async def upload_image(request: Request, user_id: str = Depends(verify_jwt_token
                 "image_id": result["image_id"],
                 "preview_base64": result["preview_base64"],
                 "created_at": result["created_at"],
-                "uploads_left": result["uploads_left"]
+                "storage_left": result["storage_left"]
             },
             status_code=200,
         )
     except Exception as e:
         logger.error(f"upload_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
-        if "Insufficient upload credits" in str(e):
+        if "Insufficient storage space" in str(e):
             raise HTTPException(
                 status_code=403,
-                detail="Insufficient upload credits. Please upgrade to premium for more uploads."
+                detail="Insufficient storage space. Please upgrade to premium for more storage."
             )
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -192,7 +192,7 @@ async def delete_image(request: Request, user_id: str = Depends(verify_jwt_token
             return JSONResponse(
                 content={
                     "success": True,
-                    "uploads_left": result["uploads_left"]
+                    "storage_left": result["storage_left"]
                 },
                 status_code=200,
             )
@@ -221,7 +221,7 @@ async def delete_design(request: Request, user_id: str = Depends(verify_jwt_toke
             return JSONResponse(
                 content={
                     "success": True,
-                    "recents_left": result["recents_left"]
+                    "storage_left": result["storage_left"]
                 },
                 status_code=200,
             )
@@ -274,7 +274,7 @@ async def design_image(request: Request, user_id: str = Depends(verify_jwt_token
                 "preview_base64": result["preview_base64"],
                 "created_at": result["created_at"],
                 "designs_left": result["designs_left"],
-                "recents_left": result["recents_left"]
+                "storage_left": result["storage_left"]
             },
             status_code=200,
         )
@@ -284,6 +284,11 @@ async def design_image(request: Request, user_id: str = Depends(verify_jwt_token
             raise HTTPException(
                 status_code=403,
                 detail="Insufficient design credits. Please upgrade to premium for more designs."
+            )
+        if "Insufficient storage space" in str(e):
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient storage space. Please upgrade to premium for more storage."
             )
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -45,7 +45,7 @@ class Database:
             user_id
         ):
         query = """
-            SELECT user_name, user_surname, user_email, picture_url, user_type, uploads_left, designs_left, recents_left, last_payment_at
+            SELECT user_name, user_surname, user_email, picture_url, user_type, storage_left, designs_left, last_payment_at
             FROM users
             WHERE user_id = %s
         """
@@ -54,7 +54,7 @@ class Database:
             result = self.cursor.fetchone()
 
             if result:
-                last_payment = result[8]
+                last_payment = result[7]
                 next_renewal = None
 
                 # Calculate next renewal date if premium and has last_payment_at
@@ -84,9 +84,8 @@ class Database:
                     "email": result[2],
                     "picture_url": result[3],
                     "type": result[4],
-                    "uploads_left": result[5],
+                    "storage_left": result[5],
                     "designs_left": result[6],
-                    "recents_left": result[7],
                     "next_renewal_date": next_renewal
                 }
             return None
@@ -105,9 +104,9 @@ class Database:
             image_bytes,
             preview_bytes
         ):
-        # Check if user has upload credits
+        # Check if user has storage space
         credit_check_query = """
-        SELECT uploads_left FROM users WHERE user_id = %s
+        SELECT storage_left FROM users WHERE user_id = %s
         """
 
         insert_query = """
@@ -117,9 +116,9 @@ class Database:
         """
 
         decrement_query = """
-        UPDATE users SET uploads_left = uploads_left - 1
+        UPDATE users SET storage_left = storage_left - 1
         WHERE user_id = %s
-        RETURNING uploads_left
+        RETURNING storage_left
         """
 
         try:
@@ -127,7 +126,7 @@ class Database:
             credit_result = self.cursor.fetchone()
 
             if not credit_result or credit_result[0] <= 0:
-                raise Exception("Insufficient upload credits")
+                raise Exception("Insufficient storage space")
 
             self.cursor.execute(insert_query, (
                 user_id,
@@ -140,13 +139,13 @@ class Database:
             created_at = result[1]
 
             self.cursor.execute(decrement_query, (user_id,))
-            new_credits = self.cursor.fetchone()[0]
+            new_storage = self.cursor.fetchone()[0]
 
             return {
                 "image_id": str(image_id),
                 "preview_base64": base64.b64encode(preview_bytes).decode('utf8'),
                 "created_at": created_at.isoformat(),
-                "uploads_left": new_credits
+                "storage_left": new_storage
             }
         except DatabaseError as e:
             self.conn.rollback()
@@ -164,7 +163,7 @@ class Database:
             designed_preview_bytes
         ):
         credit_check_query = """
-        SELECT designs_left, recents_left FROM users WHERE user_id = %s
+        SELECT designs_left, storage_left FROM users WHERE user_id = %s
         """
 
         insert_query = """
@@ -174,9 +173,9 @@ class Database:
         """
 
         decrement_query = """
-        UPDATE users SET designs_left = designs_left - 1, recents_left = recents_left - 1
+        UPDATE users SET designs_left = designs_left - 1, storage_left = storage_left - 1
         WHERE user_id = %s
-        RETURNING designs_left, recents_left
+        RETURNING designs_left, storage_left
         """
 
         try:
@@ -187,7 +186,7 @@ class Database:
                 raise Exception("Insufficient design credits")
 
             if credit_result[1] <= 0:
-                raise Exception("Insufficient recents storage")
+                raise Exception("Insufficient storage space")
 
             self.cursor.execute(insert_query, (
                 user_id,
@@ -208,7 +207,7 @@ class Database:
                 "preview_base64": base64.b64encode(designed_preview_bytes).decode('utf8'),
                 "created_at": created_at.isoformat(),
                 "designs_left": new_credits[0],
-                "recents_left": new_credits[1]
+                "storage_left": new_credits[1]
             }
         except DatabaseError as e:
             self.conn.rollback()
@@ -349,9 +348,9 @@ class Database:
         """
 
         increment_query = """
-        UPDATE users SET uploads_left = uploads_left + 1
+        UPDATE users SET storage_left = storage_left + 1
         WHERE user_id = %s
-        RETURNING uploads_left
+        RETURNING storage_left
         """
 
         try:
@@ -362,8 +361,8 @@ class Database:
             self.cursor.execute(increment_query, (user_id,))
             result = self.cursor.fetchone()
 
-            return {"uploads_left": result[0]}
-        
+            return {"storage_left": result[0]}
+
         except DatabaseError as e:
             self.conn.rollback()
             raise e
@@ -382,9 +381,9 @@ class Database:
         """
 
         increment_query = """
-        UPDATE users SET recents_left = recents_left + 1
+        UPDATE users SET storage_left = storage_left + 1
         WHERE user_id = %s
-        RETURNING recents_left
+        RETURNING storage_left
         """
 
         try:
@@ -394,7 +393,7 @@ class Database:
 
             self.cursor.execute(increment_query, (user_id,))
             result = self.cursor.fetchone()
-            return {"recents_left": result[0]}
+            return {"storage_left": result[0]}
         except DatabaseError as e:
             self.conn.rollback()
             raise e
@@ -552,9 +551,8 @@ class Database:
         query = """
         UPDATE users
         SET user_type = 'premium',
-            uploads_left = 20,
+            storage_left = 50,
             designs_left = 20,
-            recents_left = 20,
             last_payment_at = CURRENT_TIMESTAMP,
             lemon_squeezy_customer_id = %s,
             receipt_url = %s
@@ -573,9 +571,8 @@ class Database:
                 "user_name": result[1],
                 "user_surname": result[2],
                 "user_type": "premium",
-                "uploads_left": 20,
-                "designs_left": 20,
-                "recents_left": 20
+                "storage_left": 50,
+                "designs_left": 20
             }
 
         except DatabaseError as e:

@@ -45,7 +45,7 @@ class Database:
             user_id
         ):
         query = """
-            SELECT user_name, user_surname, user_email, picture_url, user_type, uploads_left, generations_left, recents_left, last_payment_at
+            SELECT user_name, user_surname, user_email, picture_url, user_type, uploads_left, designs_left, recents_left, last_payment_at
             FROM users
             WHERE user_id = %s
         """
@@ -85,7 +85,7 @@ class Database:
                     "picture_url": result[3],
                     "type": result[4],
                     "uploads_left": result[5],
-                    "generations_left": result[6],
+                    "designs_left": result[6],
                     "recents_left": result[7],
                     "next_renewal_date": next_renewal
                 }
@@ -155,28 +155,28 @@ class Database:
             self.conn.rollback()
             raise e
     
-    def insert_generated_image(
+    def insert_designed_image(
             self,
             user_id,
             yourself_image_id,
             clothing_image_id,
-            generated_image_bytes,
-            generated_preview_bytes
+            designed_image_bytes,
+            designed_preview_bytes
         ):
         credit_check_query = """
-        SELECT generations_left, recents_left FROM users WHERE user_id = %s
+        SELECT designs_left, recents_left FROM users WHERE user_id = %s
         """
 
         insert_query = """
-        INSERT INTO generations (user_id, yourself_image_id, clothing_image_id, image_bytes, preview_bytes)
+        INSERT INTO designs (user_id, yourself_image_id, clothing_image_id, image_bytes, preview_bytes)
         VALUES (%s, %s, %s, %s, %s)
         RETURNING image_id, created_at
         """
 
         decrement_query = """
-        UPDATE users SET generations_left = generations_left - 1, recents_left = recents_left - 1
+        UPDATE users SET designs_left = designs_left - 1, recents_left = recents_left - 1
         WHERE user_id = %s
-        RETURNING generations_left, recents_left
+        RETURNING designs_left, recents_left
         """
 
         try:
@@ -184,7 +184,7 @@ class Database:
             credit_result = self.cursor.fetchone()
 
             if not credit_result or credit_result[0] <= 0:
-                raise Exception("Insufficient generation credits")
+                raise Exception("Insufficient design credits")
 
             if credit_result[1] <= 0:
                 raise Exception("Insufficient recents storage")
@@ -193,8 +193,8 @@ class Database:
                 user_id,
                 yourself_image_id,
                 clothing_image_id,
-                generated_image_bytes,
-                generated_preview_bytes
+                designed_image_bytes,
+                designed_preview_bytes
             ))
             result = self.cursor.fetchone()
             image_id = result[0]
@@ -205,9 +205,9 @@ class Database:
 
             return {
                 "image_id": str(image_id),
-                "preview_base64": base64.b64encode(generated_preview_bytes).decode('utf8'),
+                "preview_base64": base64.b64encode(designed_preview_bytes).decode('utf8'),
                 "created_at": created_at.isoformat(),
-                "generations_left": new_credits[0],
+                "designs_left": new_credits[0],
                 "recents_left": new_credits[1]
             }
         except DatabaseError as e:
@@ -252,13 +252,13 @@ class Database:
             self.conn.rollback()
             raise e
     
-    def get_preview_generations(
+    def get_preview_designs(
             self,
             user_id
         ):
         query = """
         SELECT image_id, preview_bytes, faved, created_at
-        FROM generations
+        FROM designs
         WHERE user_id = %s
         ORDER BY created_at DESC
         """
@@ -286,7 +286,7 @@ class Database:
             self.conn.rollback()
             raise e
         
-    def get_full_image(
+    def get_image(
             self,
             user_id,
             image_id
@@ -312,14 +312,14 @@ class Database:
             self.conn.rollback()
             raise e
 
-    def get_full_generated_image(
+    def get_design(
             self,
             user_id,
             image_id
         ):
         query = """
         SELECT image_bytes
-        FROM generations
+        FROM designs
         WHERE user_id = %s AND image_id = %s
         """
         try:
@@ -371,13 +371,13 @@ class Database:
             self.conn.rollback()
             raise e
     
-    def delete_generated_image(
+    def delete_design(
             self,
             user_id,
             image_id
         ):
         delete_query = """
-        DELETE FROM generations
+        DELETE FROM designs
         WHERE image_id = %s AND user_id = %s
         """
 
@@ -402,13 +402,13 @@ class Database:
             self.conn.rollback()
             raise e
     
-    def update_fav(
+    def update_design_fav(
             self,
             user_id,
             image_id
         ):
         query = """
-        UPDATE generations
+        UPDATE designs
         SET faved = NOT faved
         WHERE image_id = %s AND user_id = %s
         RETURNING faved
@@ -447,32 +447,6 @@ class Database:
                 return False
 
             return True
-        except DatabaseError as e:
-            self.conn.rollback()
-            raise e
-        except Exception as e:
-            self.conn.rollback()
-            raise e
-    
-    def get_image(
-            self,
-            user_id,
-            image_id
-        ):
-        query = """
-        SELECT image_bytes
-        FROM images
-        WHERE user_id = %s AND image_id = %s
-        """
-        try:
-            self.cursor.execute(query, (user_id, image_id))
-            data = self.cursor.fetchone()
-            if not data:
-                return None
-            image_bytes = bytes(data[0])
-
-            return image_bytes
-
         except DatabaseError as e:
             self.conn.rollback()
             raise e
@@ -579,7 +553,7 @@ class Database:
         UPDATE users
         SET user_type = 'premium',
             uploads_left = 20,
-            generations_left = 20,
+            designs_left = 20,
             recents_left = 20,
             last_payment_at = CURRENT_TIMESTAMP,
             lemon_squeezy_customer_id = %s,
@@ -600,7 +574,7 @@ class Database:
                 "user_surname": result[2],
                 "user_type": "premium",
                 "uploads_left": 20,
-                "generations_left": 20,
+                "designs_left": 20,
                 "recents_left": 20
             }
 

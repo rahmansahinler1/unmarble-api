@@ -71,12 +71,14 @@ async def get_previews(user_id: str = Depends(verify_jwt_token)):
     try:
         with Database() as db:
             preview_image_data = db.get_preview_images(user_id)
-            preview_generation_data = db.get_preview_generations(user_id)
+            preview_design_data = db.get_preview_designs(user_id)
+
+        # Combine into unified structure with 'design' category
+        preview_image_data["design"] = preview_design_data
 
         return JSONResponse(
             content={
-                "image_previews": preview_image_data,
-                "generation_previews": preview_generation_data
+                "image_previews": preview_image_data
             },
             status_code=200,
         )
@@ -84,14 +86,14 @@ async def get_previews(user_id: str = Depends(verify_jwt_token)):
         logger.error(f"get_previews | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/get_full_image")
-async def get_full_image(request: Request, user_id: str = Depends(verify_jwt_token)):
+@router.post("/get_image")
+async def get_image(request: Request, user_id: str = Depends(verify_jwt_token)):
     try:
         data = await request.json()
         image_id = data.get("image_id")
 
         with Database() as db:
-            image_bytes = db.get_full_image(
+            image_bytes = db.get_image(
                 user_id,
                 image_id
                 )
@@ -104,17 +106,17 @@ async def get_full_image(request: Request, user_id: str = Depends(verify_jwt_tok
             status_code=200,
         )
     except Exception as e:
-        logger.error(f"get_full_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error(f"get_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/get_full_generated_image")
-async def get_full_generated_image(request: Request, user_id: str = Depends(verify_jwt_token)):
+@router.post("/get_design")
+async def get_design(request: Request, user_id: str = Depends(verify_jwt_token)):
     try:
         data = await request.json()
         image_id = data.get("image_id")
 
         with Database() as db:
-            image_bytes = db.get_full_generated_image(
+            image_bytes = db.get_design(
                 user_id,
                 image_id
                 )
@@ -127,7 +129,7 @@ async def get_full_generated_image(request: Request, user_id: str = Depends(veri
             status_code=200,
         )
     except Exception as e:
-        logger.error(f"get_full_generated_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error(f"get_design | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
     
 @router.post("/upload_image")
@@ -135,9 +137,9 @@ async def upload_image(request: Request, user_id: str = Depends(verify_jwt_token
     try:
         data = await request.json()
         category = data.get("category")
-        image_bytes = data.get("imageBytes")
+        image_base64 = data.get("imageBase64")
 
-        decoded_bytes = base64.b64decode(image_bytes)
+        decoded_bytes = base64.b64decode(image_base64)
 
         max_size_bytes = 6 * 1024 * 1024
         if len(decoded_bytes) > max_size_bytes:
@@ -203,14 +205,14 @@ async def delete_image(request: Request, user_id: str = Depends(verify_jwt_token
         logger.error(f"delete_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/delete_generated_image")
-async def delete_generated_image(request: Request, user_id: str = Depends(verify_jwt_token)):
+@router.post("/delete_design")
+async def delete_design(request: Request, user_id: str = Depends(verify_jwt_token)):
     try:
         data = await request.json()
         image_id = data.get("image_id")
 
         with Database() as db:
-            result = db.delete_generated_image(
+            result = db.delete_design(
                 user_id,
                 image_id
                 )
@@ -229,11 +231,11 @@ async def delete_generated_image(request: Request, user_id: str = Depends(verify
                 status_code=404,
             )
     except Exception as e:
-        logger.error(f"delete_generated_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error(f"delete_design | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
     
-@router.post("/generate_image")
-async def generate_image(request: Request, user_id: str = Depends(verify_jwt_token)):
+@router.post("/design_image")
+async def design_image(request: Request, user_id: str = Depends(verify_jwt_token)):
     try:
         data = await request.json()
         yourself_image_id = data.get("yourself_image_id")
@@ -249,20 +251,20 @@ async def generate_image(request: Request, user_id: str = Depends(verify_jwt_tok
                 clothing_image_id
                 )
 
-        generated_image_bytes = imgf.generate_image(
+        designed_image_bytes = imgf.design_image(
             yourself_image_bytes,
             clothing_image_bytes
             )
-        image_base64 = base64.b64encode(generated_image_bytes).decode('utf-8')
+        image_base64 = base64.b64encode(designed_image_bytes).decode('utf-8')
 
-        generated_preview_bytes = imgf.create_preview(generated_image_bytes)
+        designed_preview_bytes = imgf.create_preview(designed_image_bytes)
         with Database() as db:
-            result = db.insert_generated_image(
+            result = db.insert_designed_image(
                 user_id,
                 yourself_image_id,
                 clothing_image_id,
-                generated_image_bytes,
-                generated_preview_bytes
+                designed_image_bytes,
+                designed_preview_bytes
                 )
 
         return JSONResponse(
@@ -271,28 +273,28 @@ async def generate_image(request: Request, user_id: str = Depends(verify_jwt_tok
                 "image_base64": image_base64,
                 "preview_base64": result["preview_base64"],
                 "created_at": result["created_at"],
-                "generations_left": result["generations_left"],
+                "designs_left": result["designs_left"],
                 "recents_left": result["recents_left"]
             },
             status_code=200,
         )
     except Exception as e:
-        logger.error(f"generate_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
-        if "Insufficient generation credits" in str(e):
+        logger.error(f"design_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        if "Insufficient design credits" in str(e):
             raise HTTPException(
                 status_code=403,
-                detail="Insufficient generation credits. Please upgrade to premium for more generations."
+                detail="Insufficient design credits. Please upgrade to premium for more designs."
             )
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/update_fav")
-async def update_fav(request: Request, user_id: str = Depends(verify_jwt_token)):
+@router.post("/update_design_fav")
+async def update_design_fav(request: Request, user_id: str = Depends(verify_jwt_token)):
     try:
         data = await request.json()
         image_id = data.get("image_id")
 
         with Database() as db:
-            result = db.update_fav(
+            result = db.update_design_fav(
                 user_id,
                 image_id
                 )
@@ -302,7 +304,7 @@ async def update_fav(request: Request, user_id: str = Depends(verify_jwt_token))
             status_code=200,
         )
     except Exception as e:
-        logger.error(f"update_fav | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error(f"update_design_fav | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/update_image_fav")

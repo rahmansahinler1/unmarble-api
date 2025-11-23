@@ -21,7 +21,7 @@ class ImageFunctions:
         image.save(output, format='WEBP', quality=100, method=6)
         return output.getvalue()
 
-    def generate_image(self, yourself_image_base64, clothing_image_base64):
+    def design_image(self, yourself_image_base64, clothing_image_base64):
         main_prompt = f"""
         CLOTHING VIRTUAL TRY-ON - PRECISE IMPLEMENTATION GUIDE
 

@@ -280,6 +280,28 @@ async def design_image(request: Request, user_id: str = Depends(verify_jwt_token
         )
     except Exception as e:
         logger.error(f"design_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+
+        # Check for content safety violations
+        if "CONTENT_SAFETY_VIOLATION" in str(e):
+            # Increment NSFW violation counter
+            with Database() as db:
+                violation_count = db.increment_nsfw_violation(user_id)
+
+            logger.warning(f"Content safety violation detected | {user_id} | violation count: {violation_count} | yourself_image_id: {yourself_image_id} | clothing_image_id: {clothing_image_id}")
+
+            # Construct error message based on violation count
+            if violation_count >= 3:
+                error_detail = f"CRITICAL: Content Safety Violation (Strike {violation_count}/3) - Your account is under review for repeated safety violations. The uploaded images or generated content violate our safety policies. Further violations will result in permanent account suspension."
+            elif violation_count == 2:
+                error_detail = f"WARNING: Content Safety Violation (Strike {violation_count}/3) - This is your second violation. The uploaded images or generated content violate our safety policies. One more violation will result in account suspension."
+            else:
+                error_detail = f"Content Safety Violation (Strike {violation_count}/3) - The uploaded images or generated content violate our safety policies. Please ensure all images are appropriate and comply with our Terms of Service. Repeated violations may result in account suspension."
+
+            raise HTTPException(
+                status_code=403,
+                detail=error_detail
+            )
+
         if "Insufficient design credits" in str(e):
             raise HTTPException(
                 status_code=403,

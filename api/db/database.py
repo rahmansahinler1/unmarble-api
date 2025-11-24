@@ -45,7 +45,7 @@ class Database:
             user_id
         ):
         query = """
-            SELECT user_name, user_surname, user_email, picture_url, user_type, storage_left, designs_left, last_payment_at
+            SELECT user_name, user_surname, user_email, picture_url, user_type, storage_left, designs_left, last_payment_at, nsfw_violations
             FROM users
             WHERE user_id = %s
         """
@@ -86,7 +86,8 @@ class Database:
                     "type": result[4],
                     "storage_left": result[5],
                     "designs_left": result[6],
-                    "next_renewal_date": next_renewal
+                    "next_renewal_date": next_renewal,
+                    "nsfw_violations": result[8]
                 }
             return None
 
@@ -574,6 +575,82 @@ class Database:
                 "storage_left": 50,
                 "designs_left": 20
             }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def increment_nsfw_violation(self, user_id):
+        """
+        Increment NSFW violation counter for a user.
+        Returns the new violation count.
+        """
+        query = """
+            UPDATE users
+            SET nsfw_violations = nsfw_violations + 1
+            WHERE user_id = %s
+            RETURNING nsfw_violations
+        """
+        try:
+            self.cursor.execute(query, (user_id,))
+            result = self.cursor.fetchone()
+
+            if result:
+                return result[0]
+            return None
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def get_nsfw_violations(self, user_id):
+        """
+        Get the current NSFW violation count for a user.
+        """
+        query = """
+            SELECT nsfw_violations
+            FROM users
+            WHERE user_id = %s
+        """
+        try:
+            self.cursor.execute(query, (user_id,))
+            result = self.cursor.fetchone()
+
+            if result:
+                return result[0]
+            return 0
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def reset_nsfw_violations(self, user_id):
+        """
+        Reset NSFW violation counter to 0 for a user.
+        Used for appeals or administrative corrections.
+        """
+        query = """
+            UPDATE users
+            SET nsfw_violations = 0
+            WHERE user_id = %s
+            RETURNING nsfw_violations
+        """
+        try:
+            self.cursor.execute(query, (user_id,))
+            result = self.cursor.fetchone()
+
+            if result:
+                return True
+            return False
 
         except DatabaseError as e:
             self.conn.rollback()

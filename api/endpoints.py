@@ -240,12 +240,19 @@ async def design_image(request: Request, user_id: str = Depends(verify_jwt_token
         data = await request.json()
         yourself_image_id = data.get("yourself_image_id")
         clothing_image_id = data.get("clothing_image_id")
+        category = data.get("category")
 
         with Database() as db:
-            yourself_image_bytes = bytes(db.get_image(
-                user_id,
-                yourself_image_id
-                ))
+            if category == "design":
+                yourself_image_bytes = bytes(db.get_design(
+                    user_id,
+                    yourself_image_id
+                    ))
+            else:
+                yourself_image_bytes = bytes(db.get_image(
+                    user_id,
+                    yourself_image_id
+                    ))
             clothing_image_bytes = bytes(db.get_image(
                 user_id,
                 clothing_image_id

@@ -650,8 +650,8 @@ class Database:
         query = """
         UPDATE users
         SET user_type = 'premium',
-            storage_left = 50,
-            designs_left = 30,
+            storage_left = 100,
+            designs_left = 50,
             last_payment_at = CURRENT_TIMESTAMP,
             lemon_squeezy_customer_id = %s,
             receipt_url = %s,
@@ -674,8 +674,8 @@ class Database:
                 "user_surname": result[2],
                 "user_type": "premium",
                 "subscription_status": "active",
-                "storage_left": 50,
-                "designs_left": 30
+                "storage_left": 100,
+                "designs_left": 50
             }
 
         except DatabaseError as e:
@@ -890,7 +890,7 @@ class Database:
     def renew_subscription(self, customer_id, user_email, subscription_id):
         """
         Handle monthly subscription renewal (payment success).
-        Resets designs_left to 30 (monthly quota).
+        Resets designs_left to 50 (monthly quota).
         Updates last_payment_at to current timestamp.
         Does NOT reset storage_left (cumulative).
         Uses same robust lookup as other subscription functions.
@@ -921,7 +921,7 @@ class Database:
 
             update_query = """
                 UPDATE users
-                SET designs_left = 30,
+                SET designs_left = 50,
                     last_payment_at = CURRENT_TIMESTAMP,
                     subscription_status = 'active',
                     subscription_id = %s,

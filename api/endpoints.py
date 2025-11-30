@@ -786,7 +786,7 @@ async def subscription_expired_webhook(request: Request):
 async def subscription_payment_success_webhook(request: Request):
     """
     Handle Lemon Squeezy subscription_payment_success event.
-    Monthly renewal - reset generation credits to 30.
+    Monthly renewal - reset design credits to 50.
     Storage is NOT reset (cumulative).
     """
     try:

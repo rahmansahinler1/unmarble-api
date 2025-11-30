@@ -1122,3 +1122,108 @@ class Database:
         except Exception as e:
             self.conn.rollback()
             raise e
+
+    def get_user_subscription_id(self, user_id):
+        """
+        Get user's subscription_id for Lemon Squeezy API calls.
+        Only returns if the subscription is active.
+        """
+        query = """
+            SELECT subscription_id, subscription_status
+            FROM users
+            WHERE user_id = %s
+        """
+        try:
+            self.cursor.execute(query, (user_id,))
+            result = self.cursor.fetchone()
+
+            if not result:
+                return None
+
+            subscription_id = result[0]
+            subscription_status = result[1]
+
+            # Only return if subscription is active
+            if subscription_status != 'active':
+                return None
+
+            return {
+                "subscription_id": subscription_id,
+                "subscription_status": subscription_status
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def get_user_subscription_for_resume(self, user_id):
+        """
+        Get user's subscription_id for resuming a cancelled subscription.
+        Only returns if the subscription status is 'cancelled'.
+        """
+        query = """
+            SELECT subscription_id, subscription_status
+            FROM users
+            WHERE user_id = %s
+        """
+        try:
+            self.cursor.execute(query, (user_id,))
+            result = self.cursor.fetchone()
+
+            if not result:
+                return None
+
+            subscription_id = result[0]
+            subscription_status = result[1]
+
+            # Only return if subscription is cancelled (can be resumed)
+            if subscription_status != 'cancelled':
+                return None
+
+            return {
+                "subscription_id": subscription_id,
+                "subscription_status": subscription_status
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def store_cancellation_reason(self, user_id, reason):
+        """
+        Store cancellation reason in the feedbacks table.
+        Useful for analytics on why users cancel.
+        """
+        insert_query = """
+            INSERT INTO feedbacks (user_id, message, feedback_type)
+            VALUES (%s, %s, 'cancellation')
+            RETURNING feedback_id, created_at
+        """
+        try:
+            # Try with feedback_type column first
+            self.cursor.execute(insert_query, (user_id, f"Cancellation reason: {reason}"))
+            result = self.cursor.fetchone()
+            return {
+                "feedback_id": str(result[0]),
+                "created_at": result[1].isoformat()
+            }
+        except Exception:
+            # Fallback: use simple insert without feedback_type column
+            self.conn.rollback()
+            fallback_query = """
+                INSERT INTO feedbacks (user_id, message)
+                VALUES (%s, %s)
+                RETURNING feedback_id, created_at
+            """
+            self.cursor.execute(fallback_query, (user_id, f"Cancellation reason: {reason}"))
+            result = self.cursor.fetchone()
+            return {
+                "feedback_id": str(result[0]),
+                "created_at": result[1].isoformat()
+            }

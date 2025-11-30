@@ -1065,3 +1065,122 @@ async def subscription_payment_refunded_webhook(request: Request):
     except Exception as e:
         logger.error(f"subscription_payment_refunded_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cancel_subscription")
+async def cancel_subscription(request: Request, user_id: str = Depends(verify_jwt_token)):
+    """
+    User-initiated subscription cancellation.
+    Calls Lemon Squeezy API to cancel the subscription.
+    """
+    try:
+        data = await request.json()
+        reason = data.get("reason", "")
+
+        with Database() as db:
+            user_subscription = db.get_user_subscription_id(user_id)
+
+        if not user_subscription:
+            raise HTTPException(status_code=400, detail="No active subscription found")
+
+        subscription_id = user_subscription["subscription_id"]
+
+        if not subscription_id:
+            raise HTTPException(status_code=400, detail="No subscription ID found")
+
+        # Call Lemon Squeezy API to cancel subscription
+        ls_api_key = os.getenv("LEMON_SQUEEZY_API_KEY")
+
+        if not ls_api_key:
+            logger.error("cancel_subscription | LEMON_SQUEEZY_API_KEY not configured")
+            raise HTTPException(status_code=500, detail="Payment service not configured")
+
+        response = requests.delete(
+            f"https://api.lemonsqueezy.com/v1/subscriptions/{subscription_id}",
+            headers={
+                "Authorization": f"Bearer {ls_api_key}",
+                "Accept": "application/vnd.api+json",
+                "Content-Type": "application/vnd.api+json"
+            }
+        )
+
+        if response.status_code not in [200, 204]:
+            logger.error(f"cancel_subscription | Lemon Squeezy API error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=500, detail="Failed to cancel subscription")
+
+        # Store cancellation reason for analytics (optional)
+        if reason:
+            with Database() as db:
+                db.store_cancellation_reason(user_id, reason)
+
+        return JSONResponse(
+            content={"message": "Subscription cancelled successfully"},
+            status_code=200
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"cancel_subscription | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/resume_subscription")
+async def resume_subscription(user_id: str = Depends(verify_jwt_token)):
+    """
+    User-initiated subscription resume.
+    Resumes a cancelled subscription by calling Lemon Squeezy API.
+    Only works if the subscription is in 'cancelled' state (before expiry).
+    """
+    try:
+        with Database() as db:
+            user_subscription = db.get_user_subscription_for_resume(user_id)
+
+        if not user_subscription:
+            raise HTTPException(status_code=400, detail="No cancelled subscription found to resume")
+
+        subscription_id = user_subscription["subscription_id"]
+
+        if not subscription_id:
+            raise HTTPException(status_code=400, detail="No subscription ID found")
+
+        # Call Lemon Squeezy API to resume subscription
+        ls_api_key = os.getenv("LEMON_SQUEEZY_API_KEY")
+
+        if not ls_api_key:
+            logger.error("resume_subscription | LEMON_SQUEEZY_API_KEY not configured")
+            raise HTTPException(status_code=500, detail="Payment service not configured")
+
+        # Resume by setting cancelled to false
+        response = requests.patch(
+            f"https://api.lemonsqueezy.com/v1/subscriptions/{subscription_id}",
+            headers={
+                "Authorization": f"Bearer {ls_api_key}",
+                "Accept": "application/vnd.api+json",
+                "Content-Type": "application/vnd.api+json"
+            },
+            json={
+                "data": {
+                    "type": "subscriptions",
+                    "id": str(subscription_id),
+                    "attributes": {
+                        "cancelled": False
+                    }
+                }
+            }
+        )
+
+        if response.status_code != 200:
+            logger.error(f"resume_subscription | Lemon Squeezy API error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=500, detail="Failed to resume subscription")
+
+        return JSONResponse(
+            content={"message": "Subscription resumed successfully"},
+            status_code=200
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"resume_subscription | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

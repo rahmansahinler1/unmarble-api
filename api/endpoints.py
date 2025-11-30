@@ -852,3 +852,216 @@ async def subscription_payment_success_webhook(request: Request):
     except Exception as e:
         logger.error(f"subscription_payment_success_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/webhooks/subscription_payment_failed")
+async def subscription_payment_failed_webhook(request: Request):
+    """
+    Handle Lemon Squeezy subscription_payment_failed event.
+    Payment failed - mark as past_due. User still has access while LS retries.
+    """
+    try:
+        body = await request.body()
+        payload = await request.json()
+        signature = request.headers.get("X-Signature")
+
+        webhook_secret = os.getenv("LEMON_SQUEEZY_SECRET_KEY")
+
+        if not webhook_secret:
+            logger.error("subscription_payment_failed_webhook | LEMON_SQUEEZY_SECRET_KEY not configured")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        expected_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        if not signature:
+            logger.warning("subscription_payment_failed_webhook | Missing X-Signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("subscription_payment_failed_webhook | Invalid signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_name = payload.get("meta", {}).get("event_name")
+        if event_name != "subscription_payment_failed":
+            return JSONResponse(
+                status_code=200,
+                content={"message": f"Event {event_name} ignored"}
+            )
+
+        data = payload.get("data", {})
+        attributes = data.get("attributes", {})
+        subscription_id = str(attributes.get("subscription_id", ""))
+        customer_id = attributes.get("customer_id")
+        customer_email = attributes.get("user_email")
+
+        if not customer_id and not customer_email:
+            logger.error("subscription_payment_failed_webhook | Missing both customer_id and user_email in payload")
+            raise HTTPException(status_code=400, detail="Missing customer identifier")
+
+        with Database() as db:
+            result = db.fail_subscription_payment(
+                customer_id=customer_id,
+                user_email=customer_email,
+                subscription_id=subscription_id
+            )
+
+        logger.warning(f"subscription_payment_failed_webhook | User {customer_email or customer_id} payment failed, marked as past_due")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Payment failure recorded",
+                "user_id": result["user_id"],
+                "subscription_status": result["subscription_status"]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"subscription_payment_failed_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/webhooks/subscription_payment_recovered")
+async def subscription_payment_recovered_webhook(request: Request):
+    """
+    Handle Lemon Squeezy subscription_payment_recovered event.
+    Failed payment recovered - restore active status.
+    """
+    try:
+        body = await request.body()
+        payload = await request.json()
+        signature = request.headers.get("X-Signature")
+
+        webhook_secret = os.getenv("LEMON_SQUEEZY_SECRET_KEY")
+
+        if not webhook_secret:
+            logger.error("subscription_payment_recovered_webhook | LEMON_SQUEEZY_SECRET_KEY not configured")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        expected_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        if not signature:
+            logger.warning("subscription_payment_recovered_webhook | Missing X-Signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("subscription_payment_recovered_webhook | Invalid signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_name = payload.get("meta", {}).get("event_name")
+        if event_name != "subscription_payment_recovered":
+            return JSONResponse(
+                status_code=200,
+                content={"message": f"Event {event_name} ignored"}
+            )
+
+        data = payload.get("data", {})
+        attributes = data.get("attributes", {})
+        subscription_id = str(attributes.get("subscription_id", ""))
+        customer_id = attributes.get("customer_id")
+        customer_email = attributes.get("user_email")
+
+        if not customer_id and not customer_email:
+            logger.error("subscription_payment_recovered_webhook | Missing both customer_id and user_email in payload")
+            raise HTTPException(status_code=400, detail="Missing customer identifier")
+
+        with Database() as db:
+            result = db.recover_subscription(
+                customer_id=customer_id,
+                user_email=customer_email,
+                subscription_id=subscription_id
+            )
+
+        logger.info(f"subscription_payment_recovered_webhook | User {customer_email or customer_id} payment recovered, status restored to active")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Payment recovered successfully",
+                "user_id": result["user_id"],
+                "subscription_status": result["subscription_status"]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"subscription_payment_recovered_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/webhooks/subscription_payment_refunded")
+async def subscription_payment_refunded_webhook(request: Request):
+    """
+    Handle Lemon Squeezy subscription_payment_refunded event.
+    Refund issued - revoke access immediately (EU 14-day compliance).
+    """
+    try:
+        body = await request.body()
+        payload = await request.json()
+        signature = request.headers.get("X-Signature")
+
+        webhook_secret = os.getenv("LEMON_SQUEEZY_SECRET_KEY")
+
+        if not webhook_secret:
+            logger.error("subscription_payment_refunded_webhook | LEMON_SQUEEZY_SECRET_KEY not configured")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        expected_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        if not signature:
+            logger.warning("subscription_payment_refunded_webhook | Missing X-Signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("subscription_payment_refunded_webhook | Invalid signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_name = payload.get("meta", {}).get("event_name")
+        if event_name != "subscription_payment_refunded":
+            return JSONResponse(
+                status_code=200,
+                content={"message": f"Event {event_name} ignored"}
+            )
+
+        data = payload.get("data", {})
+        attributes = data.get("attributes", {})
+        subscription_id = str(attributes.get("subscription_id", ""))
+        customer_id = attributes.get("customer_id")
+        customer_email = attributes.get("user_email")
+
+        if not customer_id and not customer_email:
+            logger.error("subscription_payment_refunded_webhook | Missing both customer_id and user_email in payload")
+            raise HTTPException(status_code=400, detail="Missing customer identifier")
+
+        with Database() as db:
+            result = db.refund_subscription(
+                customer_id=customer_id,
+                user_email=customer_email,
+                subscription_id=subscription_id
+            )
+
+        logger.info(f"subscription_payment_refunded_webhook | User {customer_email or customer_id} refunded, access revoked")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Refund processed, access revoked",
+                "user_id": result["user_id"],
+                "subscription_status": result["subscription_status"]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"subscription_payment_refunded_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

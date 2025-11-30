@@ -950,3 +950,175 @@ class Database:
         except Exception as e:
             self.conn.rollback()
             raise e
+
+    def fail_subscription_payment(self, customer_id, user_email, subscription_id):
+        """
+        Handle payment failure - mark as past_due.
+        User still has access while Lemon Squeezy retries.
+        Uses same robust lookup as other subscription functions.
+        """
+        find_user_query = """
+            SELECT user_id
+            FROM users
+            WHERE lemon_squeezy_customer_id = %s
+        """
+
+        try:
+            self.cursor.execute(find_user_query, (str(customer_id),))
+            user_result = self.cursor.fetchone()
+
+            if not user_result and user_email:
+                find_by_email_query = """
+                    SELECT user_id
+                    FROM users
+                    WHERE user_email = %s
+                """
+                self.cursor.execute(find_by_email_query, (user_email,))
+                user_result = self.cursor.fetchone()
+
+            if not user_result:
+                raise Exception(f"User not found with customer_id {customer_id} or email {user_email}")
+
+            user_id = user_result[0]
+
+            update_query = """
+                UPDATE users
+                SET subscription_status = 'past_due',
+                    subscription_id = %s
+                WHERE user_id = %s
+                RETURNING user_id, user_name, user_surname
+            """
+            self.cursor.execute(update_query, (subscription_id, user_id))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"Failed to update user {user_id}")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "subscription_status": "past_due"
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def recover_subscription(self, customer_id, user_email, subscription_id):
+        """
+        Handle payment recovery after failed payment.
+        Sets subscription_status back to 'active'.
+        Uses same robust lookup as other subscription functions.
+        """
+        find_user_query = """
+            SELECT user_id
+            FROM users
+            WHERE lemon_squeezy_customer_id = %s
+        """
+
+        try:
+            self.cursor.execute(find_user_query, (str(customer_id),))
+            user_result = self.cursor.fetchone()
+
+            if not user_result and user_email:
+                find_by_email_query = """
+                    SELECT user_id
+                    FROM users
+                    WHERE user_email = %s
+                """
+                self.cursor.execute(find_by_email_query, (user_email,))
+                user_result = self.cursor.fetchone()
+
+            if not user_result:
+                raise Exception(f"User not found with customer_id {customer_id} or email {user_email}")
+
+            user_id = user_result[0]
+
+            update_query = """
+                UPDATE users
+                SET subscription_status = 'active',
+                    subscription_id = %s
+                WHERE user_id = %s
+                RETURNING user_id, user_name, user_surname
+            """
+            self.cursor.execute(update_query, (subscription_id, user_id))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"Failed to update user {user_id}")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "subscription_status": "active"
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def refund_subscription(self, customer_id, user_email, subscription_id):
+        """
+        Handle subscription refund.
+        Sets subscription_status to 'refunded'.
+        User loses access immediately but data preserved.
+        Uses same robust lookup as other subscription functions.
+        """
+        find_user_query = """
+            SELECT user_id
+            FROM users
+            WHERE lemon_squeezy_customer_id = %s
+        """
+
+        try:
+            self.cursor.execute(find_user_query, (str(customer_id),))
+            user_result = self.cursor.fetchone()
+
+            if not user_result and user_email:
+                find_by_email_query = """
+                    SELECT user_id
+                    FROM users
+                    WHERE user_email = %s
+                """
+                self.cursor.execute(find_by_email_query, (user_email,))
+                user_result = self.cursor.fetchone()
+
+            if not user_result:
+                raise Exception(f"User not found with customer_id {customer_id} or email {user_email}")
+
+            user_id = user_result[0]
+
+            update_query = """
+                UPDATE users
+                SET subscription_status = 'refunded',
+                    subscription_id = %s
+                WHERE user_id = %s
+                RETURNING user_id, user_name, user_surname
+            """
+            self.cursor.execute(update_query, (subscription_id, user_id))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"Failed to update user {user_id}")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "subscription_status": "refunded"
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e

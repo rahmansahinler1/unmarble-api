@@ -10,3 +10,8 @@ ADD COLUMN subscription_ends_at TIMESTAMP DEFAULT NULL;
 
 -- Update existing premium users to have 'active' status
 UPDATE users SET subscription_status = 'active' WHERE user_type = 'premium';
+
+-- Update default limits
+ALTER TABLE users
+ALTER COLUMN storage_left SET DEFAULT 5,
+ALTER COLUMN designs_left SET DEFAULT 2;

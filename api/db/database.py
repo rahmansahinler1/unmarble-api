@@ -82,13 +82,18 @@ class Database:
                     next_renewal_date = last_payment.replace(year=year, month=month, day=day)
                     next_renewal = next_renewal_date.strftime("%b %d, %Y")
 
-                # Calculate days until expiry for cancelled subscriptions
+                # Calculate days for cancelled/expired subscriptions
                 days_until_expiry = None
+                days_since_expiry = None
+                from datetime import datetime
+                now = datetime.now()
+
                 if subscription_status == 'cancelled' and subscription_ends_at:
-                    from datetime import datetime
-                    now = datetime.now()
                     delta = subscription_ends_at - now
                     days_until_expiry = max(0, delta.days)
+                elif subscription_status == 'expired' and subscription_ends_at:
+                    delta = now - subscription_ends_at
+                    days_since_expiry = max(0, delta.days)
 
                 return {
                     "name": result[0],
@@ -102,7 +107,8 @@ class Database:
                     "nsfw_violations": result[8],
                     "subscription_status": subscription_status,
                     "subscription_ends_at": subscription_ends_at.isoformat() if subscription_ends_at else None,
-                    "days_until_expiry": days_until_expiry
+                    "days_until_expiry": days_until_expiry,
+                    "days_since_expiry": days_since_expiry
                 }
             return None
 
@@ -558,51 +564,6 @@ class Database:
             self.conn.rollback()
             raise e
 
-    def create_subscription(
-            self,
-            user_email,
-            customer_id,
-            receipt_url,
-            subscription_id=None
-        ):
-        query = """
-        UPDATE users
-        SET user_type = 'premium',
-            storage_left = 50,
-            designs_left = 30,
-            last_payment_at = CURRENT_TIMESTAMP,
-            lemon_squeezy_customer_id = %s,
-            receipt_url = %s,
-            subscription_status = 'active',
-            subscription_id = %s,
-            subscription_ends_at = NULL
-        WHERE user_email = %s
-        RETURNING user_id, user_name, user_surname
-        """
-        try:
-            self.cursor.execute(query, (customer_id, receipt_url, subscription_id, user_email))
-            result = self.cursor.fetchone()
-
-            if not result:
-                raise Exception(f"User with email {user_email} not found")
-
-            return {
-                "user_id": str(result[0]),
-                "user_name": result[1],
-                "user_surname": result[2],
-                "user_type": "premium",
-                "subscription_status": "active",
-                "storage_left": 50,
-                "designs_left": 30
-            }
-
-        except DatabaseError as e:
-            self.conn.rollback()
-            raise e
-        except Exception as e:
-            self.conn.rollback()
-            raise e
-
     def increment_nsfw_violation(self, user_id):
         """
         Increment NSFW violation counter for a user.
@@ -671,6 +632,51 @@ class Database:
             if result:
                 return True
             return False
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+    
+    def create_subscription(
+            self,
+            user_email,
+            customer_id,
+            receipt_url,
+            subscription_id=None
+        ):
+        query = """
+        UPDATE users
+        SET user_type = 'premium',
+            storage_left = 50,
+            designs_left = 30,
+            last_payment_at = CURRENT_TIMESTAMP,
+            lemon_squeezy_customer_id = %s,
+            receipt_url = %s,
+            subscription_status = 'active',
+            subscription_id = %s,
+            subscription_ends_at = NULL
+        WHERE user_email = %s
+        RETURNING user_id, user_name, user_surname
+        """
+        try:
+            self.cursor.execute(query, (customer_id, receipt_url, subscription_id, user_email))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"User with email {user_email} not found")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "user_type": "premium",
+                "subscription_status": "active",
+                "storage_left": 50,
+                "designs_left": 30
+            }
 
         except DatabaseError as e:
             self.conn.rollback()
@@ -752,6 +758,125 @@ class Database:
                 "user_name": result[1],
                 "user_surname": result[2],
                 "subscription_status": "cancelled",
+                "subscription_ends_at": result[3].isoformat() if result[3] else None
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def resume_subscription(self, customer_id, user_email, subscription_id):
+        """
+        Resume a cancelled subscription.
+        Uses same robust lookup as cancel_subscription.
+        Sets subscription_status back to 'active' and clears ends_at.
+        Does NOT reset credits (user never lost them).
+        """
+        find_user_query = """
+            SELECT user_id
+            FROM users
+            WHERE lemon_squeezy_customer_id = %s
+        """
+
+        try:
+            self.cursor.execute(find_user_query, (str(customer_id),))
+            user_result = self.cursor.fetchone()
+
+            if not user_result and user_email:
+                find_by_email_query = """
+                    SELECT user_id
+                    FROM users
+                    WHERE user_email = %s
+                """
+                self.cursor.execute(find_by_email_query, (user_email,))
+                user_result = self.cursor.fetchone()
+
+            if not user_result:
+                raise Exception(f"User not found with customer_id {customer_id} or email {user_email}")
+
+            user_id = user_result[0]
+
+            update_query = """
+                UPDATE users
+                SET subscription_status = 'active',
+                    subscription_id = %s,
+                    subscription_ends_at = NULL
+                WHERE user_id = %s
+                RETURNING user_id, user_name, user_surname
+            """
+            self.cursor.execute(update_query, (subscription_id, user_id))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"Failed to update user {user_id}")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "subscription_status": "active"
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def expire_subscription(self, customer_id, user_email, subscription_id):
+        """
+        Mark subscription as expired.
+        Uses same robust lookup as other subscription functions.
+        Sets subscription_status to 'expired'.
+        Preserves subscription_ends_at for calculating days since expiry.
+        Does NOT change user_type or delete data.
+        """
+        find_user_query = """
+            SELECT user_id
+            FROM users
+            WHERE lemon_squeezy_customer_id = %s
+        """
+
+        try:
+            self.cursor.execute(find_user_query, (str(customer_id),))
+            user_result = self.cursor.fetchone()
+
+            if not user_result and user_email:
+                find_by_email_query = """
+                    SELECT user_id
+                    FROM users
+                    WHERE user_email = %s
+                """
+                self.cursor.execute(find_by_email_query, (user_email,))
+                user_result = self.cursor.fetchone()
+
+            if not user_result:
+                raise Exception(f"User not found with customer_id {customer_id} or email {user_email}")
+
+            user_id = user_result[0]
+
+            update_query = """
+                UPDATE users
+                SET subscription_status = 'expired',
+                    subscription_id = %s
+                WHERE user_id = %s
+                RETURNING user_id, user_name, user_surname, subscription_ends_at
+            """
+            self.cursor.execute(update_query, (subscription_id, user_id))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"Failed to update user {user_id}")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "subscription_status": "expired",
                 "subscription_ends_at": result[3].isoformat() if result[3] else None
             }
 

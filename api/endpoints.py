@@ -640,3 +640,145 @@ async def subscription_cancelled_webhook(request: Request):
     except Exception as e:
         logger.error(f"subscription_cancelled_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/webhooks/subscription_resumed")
+async def subscription_resumed_webhook(request: Request):
+    """
+    Handle Lemon Squeezy subscription_resumed event.
+    User resumed their cancelled subscription before it expired.
+    """
+    try:
+        body = await request.body()
+        payload = await request.json()
+        signature = request.headers.get("X-Signature")
+
+        webhook_secret = os.getenv("LEMON_SQUEEZY_SECRET_KEY")
+
+        if not webhook_secret:
+            logger.error("subscription_resumed_webhook | LEMON_SQUEEZY_SECRET_KEY not configured")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        expected_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        if not signature:
+            logger.warning("subscription_resumed_webhook | Missing X-Signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("subscription_resumed_webhook | Invalid signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_name = payload.get("meta", {}).get("event_name")
+        if event_name != "subscription_resumed":
+            return JSONResponse(
+                status_code=200,
+                content={"message": f"Event {event_name} ignored"}
+            )
+
+        data = payload.get("data", {})
+        attributes = data.get("attributes", {})
+        subscription_id = str(data.get("id", ""))
+        customer_id = attributes.get("customer_id")
+        customer_email = attributes.get("user_email")
+
+        if not customer_id and not customer_email:
+            logger.error("subscription_resumed_webhook | Missing both customer_id and user_email in payload")
+            raise HTTPException(status_code=400, detail="Missing customer identifier")
+
+        with Database() as db:
+            result = db.resume_subscription(
+                customer_id=customer_id,
+                user_email=customer_email,
+                subscription_id=subscription_id
+            )
+
+        logger.info(f"subscription_resumed_webhook | User {customer_email or customer_id} subscription resumed")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Subscription resumed successfully",
+                "user_id": result["user_id"],
+                "subscription_status": result["subscription_status"]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"subscription_resumed_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/webhooks/subscription_expired")
+async def subscription_expired_webhook(request: Request):
+    """
+    Handle Lemon Squeezy subscription_expired event.
+    User's cancelled subscription has reached its end date.
+    """
+    try:
+        body = await request.body()
+        payload = await request.json()
+        signature = request.headers.get("X-Signature")
+
+        webhook_secret = os.getenv("LEMON_SQUEEZY_SECRET_KEY")
+
+        if not webhook_secret:
+            logger.error("subscription_expired_webhook | LEMON_SQUEEZY_SECRET_KEY not configured")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        expected_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        if not signature:
+            logger.warning("subscription_expired_webhook | Missing X-Signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("subscription_expired_webhook | Invalid signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        event_name = payload.get("meta", {}).get("event_name")
+        if event_name != "subscription_expired":
+            return JSONResponse(
+                status_code=200,
+                content={"message": f"Event {event_name} ignored"}
+            )
+
+        data = payload.get("data", {})
+        attributes = data.get("attributes", {})
+        subscription_id = str(data.get("id", ""))
+        customer_id = attributes.get("customer_id")
+        customer_email = attributes.get("user_email")
+
+        if not customer_id and not customer_email:
+            logger.error("subscription_expired_webhook | Missing both customer_id and user_email in payload")
+            raise HTTPException(status_code=400, detail="Missing customer identifier")
+
+        with Database() as db:
+            result = db.expire_subscription(
+                customer_id=customer_id,
+                user_email=customer_email,
+                subscription_id=subscription_id
+            )
+
+        logger.info(f"subscription_expired_webhook | User {customer_email or customer_id} subscription expired")
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Subscription expired",
+                "user_id": result["user_id"],
+                "subscription_status": result["subscription_status"]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"subscription_expired_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

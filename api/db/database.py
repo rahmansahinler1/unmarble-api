@@ -45,7 +45,9 @@ class Database:
             user_id
         ):
         query = """
-            SELECT user_name, user_surname, user_email, picture_url, user_type, storage_left, designs_left, last_payment_at, nsfw_violations
+            SELECT user_name, user_surname, user_email, picture_url, user_type,
+                   storage_left, designs_left, last_payment_at, nsfw_violations,
+                   subscription_status, subscription_ends_at
             FROM users
             WHERE user_id = %s
         """
@@ -56,6 +58,8 @@ class Database:
             if result:
                 last_payment = result[7]
                 next_renewal = None
+                subscription_status = result[9] or 'none'
+                subscription_ends_at = result[10]
 
                 # Calculate next renewal date if premium and has last_payment_at
                 if last_payment and result[4] == 'premium':
@@ -78,6 +82,14 @@ class Database:
                     next_renewal_date = last_payment.replace(year=year, month=month, day=day)
                     next_renewal = next_renewal_date.strftime("%b %d, %Y")
 
+                # Calculate days until expiry for cancelled subscriptions
+                days_until_expiry = None
+                if subscription_status == 'cancelled' and subscription_ends_at:
+                    from datetime import datetime
+                    now = datetime.now()
+                    delta = subscription_ends_at - now
+                    days_until_expiry = max(0, delta.days)
+
                 return {
                     "name": result[0],
                     "surname": result[1],
@@ -87,7 +99,10 @@ class Database:
                     "storage_left": result[5],
                     "designs_left": result[6],
                     "next_renewal_date": next_renewal,
-                    "nsfw_violations": result[8]
+                    "nsfw_violations": result[8],
+                    "subscription_status": subscription_status,
+                    "subscription_ends_at": subscription_ends_at.isoformat() if subscription_ends_at else None,
+                    "days_until_expiry": days_until_expiry
                 }
             return None
 
@@ -543,25 +558,29 @@ class Database:
             self.conn.rollback()
             raise e
 
-    def update_premium(
+    def create_subscription(
             self,
             user_email,
             customer_id,
-            receipt_url
+            receipt_url,
+            subscription_id=None
         ):
         query = """
         UPDATE users
         SET user_type = 'premium',
             storage_left = 50,
-            designs_left = 20,
+            designs_left = 30,
             last_payment_at = CURRENT_TIMESTAMP,
             lemon_squeezy_customer_id = %s,
-            receipt_url = %s
+            receipt_url = %s,
+            subscription_status = 'active',
+            subscription_id = %s,
+            subscription_ends_at = NULL
         WHERE user_email = %s
         RETURNING user_id, user_name, user_surname
         """
         try:
-            self.cursor.execute(query, (customer_id, receipt_url, user_email))
+            self.cursor.execute(query, (customer_id, receipt_url, subscription_id, user_email))
             result = self.cursor.fetchone()
 
             if not result:
@@ -572,8 +591,9 @@ class Database:
                 "user_name": result[1],
                 "user_surname": result[2],
                 "user_type": "premium",
+                "subscription_status": "active",
                 "storage_left": 50,
-                "designs_left": 20
+                "designs_left": 30
             }
 
         except DatabaseError as e:
@@ -651,6 +671,89 @@ class Database:
             if result:
                 return True
             return False
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def cancel_subscription(self, customer_id, user_email, subscription_id, ends_at):
+        """
+        Cancel subscription with robust user lookup.
+        Primary: lookup by lemon_squeezy_customer_id
+        Fallback: lookup by user_email
+
+        If ends_at is None, calculates from last_payment_at + 1 month.
+        """
+        # First try to find user by customer_id, then fallback to email
+        find_user_query = """
+            SELECT user_id, last_payment_at
+            FROM users
+            WHERE lemon_squeezy_customer_id = %s
+        """
+
+        try:
+            self.cursor.execute(find_user_query, (str(customer_id),))
+            user_result = self.cursor.fetchone()
+
+            # Fallback to email if customer_id not found
+            if not user_result and user_email:
+                find_by_email_query = """
+                    SELECT user_id, last_payment_at
+                    FROM users
+                    WHERE user_email = %s
+                """
+                self.cursor.execute(find_by_email_query, (user_email,))
+                user_result = self.cursor.fetchone()
+
+            if not user_result:
+                raise Exception(f"User not found with customer_id {customer_id} or email {user_email}")
+
+            user_id = user_result[0]
+            last_payment_at = user_result[1]
+
+            # Calculate ends_at if not provided
+            final_ends_at = ends_at
+            if not final_ends_at and last_payment_at:
+                # Calculate last_payment_at + 1 month
+                year = last_payment_at.year
+                month = last_payment_at.month
+                day = last_payment_at.day
+
+                if month == 12:
+                    month = 1
+                    year += 1
+                else:
+                    month += 1
+
+                max_day = calendar.monthrange(year, month)[1]
+                day = min(day, max_day)
+                final_ends_at = last_payment_at.replace(year=year, month=month, day=day)
+
+            # Update the subscription status
+            update_query = """
+                UPDATE users
+                SET subscription_status = 'cancelled',
+                    subscription_id = %s,
+                    subscription_ends_at = %s
+                WHERE user_id = %s
+                RETURNING user_id, user_name, user_surname, subscription_ends_at
+            """
+            self.cursor.execute(update_query, (subscription_id, final_ends_at, user_id))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"Failed to update user {user_id}")
+
+            return {
+                "user_id": str(result[0]),
+                "user_name": result[1],
+                "user_surname": result[2],
+                "subscription_status": "cancelled",
+                "subscription_ends_at": result[3].isoformat() if result[3] else None
+            }
 
         except DatabaseError as e:
             self.conn.rollback()

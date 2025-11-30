@@ -486,7 +486,7 @@ def generate_jwt_token(user_id: str):
     token = jwt.encode(payload, secret_key, algorithm="HS256")
     return token
 
-@router.post("/webhooks/create_subscription")
+@router.post("/webhooks/subscription_created")
 async def create_subscription_webhook(request: Request):
     try:
         body = await request.body()
@@ -521,10 +521,12 @@ async def create_subscription_webhook(request: Request):
             )
 
         # Extract subscription data
-        data = payload.get("data", {}).get("attributes", {})
-        customer_id = data.get("customer_id")
-        customer_email = data.get("user_email")
-        urls = data.get("urls", {})
+        data = payload.get("data", {})
+        subscription_id = str(data.get("id", ""))
+        attributes = data.get("attributes", {})
+        customer_id = attributes.get("customer_id")
+        customer_email = attributes.get("user_email")
+        urls = attributes.get("urls", {})
         receipt_url = urls.get("receipt")
 
         if not customer_email:
@@ -533,10 +535,11 @@ async def create_subscription_webhook(request: Request):
 
         # Update user subscription
         with Database() as db:
-            result = db.update_premium(
+            result = db.create_subscription(
                 user_email=customer_email,
                 customer_id=customer_id,
-                receipt_url=receipt_url
+                receipt_url=receipt_url,
+                subscription_id=subscription_id
             )
 
         return JSONResponse(
@@ -552,4 +555,88 @@ async def create_subscription_webhook(request: Request):
         raise
     except Exception as e:
         logger.error(f"create_subscription_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/webhooks/subscription_cancelled")
+async def subscription_cancelled_webhook(request: Request):
+    try:
+        body = await request.body()
+        payload = await request.json()
+        signature = request.headers.get("X-Signature")
+
+        # Signature verification
+        webhook_secret = os.getenv("LEMON_SQUEEZY_SECRET_KEY")
+
+        if not webhook_secret:
+            logger.error("subscription_cancelled_webhook | LEMON_SQUEEZY_SECRET_KEY not configured")
+            raise HTTPException(status_code=500, detail="Webhook secret not configured")
+
+        expected_signature = hmac.new(
+            webhook_secret.encode(), body, hashlib.sha256
+        ).hexdigest()
+
+        if not signature:
+            logger.warning("subscription_cancelled_webhook | Missing X-Signature header")
+            raise HTTPException(status_code=401, detail="Missing signature")
+
+        if not hmac.compare_digest(signature, expected_signature):
+            logger.warning("subscription_cancelled_webhook | Invalid signature")
+            raise HTTPException(status_code=401, detail="Invalid signature")
+
+        # Check event type
+        event_name = payload.get("meta", {}).get("event_name")
+        if event_name != "subscription_cancelled":
+            return JSONResponse(
+                status_code=200,
+                content={"message": f"Event {event_name} ignored"}
+            )
+
+        # Extract subscription data
+        data = payload.get("data", {})
+        attributes = data.get("attributes", {})
+        subscription_id = str(data.get("id", ""))
+        customer_id = attributes.get("customer_id")
+        customer_email = attributes.get("user_email")
+
+        # Priority: ends_at > renews_at > calculated from last_payment_at
+        ends_at_str = attributes.get("ends_at")
+        renews_at_str = attributes.get("renews_at")
+
+        ends_at = None
+
+        if ends_at_str:
+            ends_at = datetime.fromisoformat(ends_at_str.replace("Z", "+00:00"))
+        elif renews_at_str:
+            ends_at = datetime.fromisoformat(renews_at_str.replace("Z", "+00:00"))
+        # If both are None, database function will calculate from last_payment_at
+
+        # We need at least customer_id or email to find the user
+        if not customer_id and not customer_email:
+            logger.error("subscription_cancelled_webhook | Missing both customer_id and user_email in payload")
+            raise HTTPException(status_code=400, detail="Missing customer identifier")
+
+        # Update user subscription status
+        with Database() as db:
+            result = db.cancel_subscription(
+                customer_id=customer_id,
+                user_email=customer_email,
+                subscription_id=subscription_id,
+                ends_at=ends_at
+            )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Subscription cancellation recorded",
+                "user_id": result["user_id"],
+                "subscription_status": result["subscription_status"],
+                "subscription_ends_at": result["subscription_ends_at"]
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"subscription_cancelled_webhook | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

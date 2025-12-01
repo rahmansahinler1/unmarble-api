@@ -695,8 +695,6 @@ async def subscription_resumed_webhook(request: Request):
                 subscription_id=subscription_id
             )
 
-        logger.info(f"subscription_resumed_webhook | User {customer_email or customer_id} subscription resumed")
-
         return JSONResponse(
             status_code=200,
             content={
@@ -978,8 +976,6 @@ async def subscription_payment_recovered_webhook(request: Request):
                 subscription_id=subscription_id
             )
 
-        logger.info(f"subscription_payment_recovered_webhook | User {customer_email or customer_id} payment recovered, status restored to active")
-
         return JSONResponse(
             status_code=200,
             content={
@@ -1048,8 +1044,6 @@ async def subscription_payment_refunded_webhook(request: Request):
                 user_email=customer_email,
                 subscription_id=subscription_id
             )
-
-        logger.info(f"subscription_payment_refunded_webhook | User {customer_email or customer_id} refunded, access revoked")
 
         return JSONResponse(
             status_code=200,

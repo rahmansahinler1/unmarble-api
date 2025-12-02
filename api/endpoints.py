@@ -41,6 +41,7 @@ def verify_jwt_token(request: Request) -> str:
     except jwt.InvalidTokenError as e:
         logger.error(f"Invalid token: {e}")
         raise HTTPException(status_code=401, detail="Invalid token")
+    
 
 @router.get("/health")
 async def health_check():
@@ -49,6 +50,7 @@ async def health_check():
         content={"status": "healthy", "service": "Unmarble API"},
         status_code=200
     )
+
 
 @router.post("/get_user")
 async def get_user(user_id: str = Depends(verify_jwt_token)):
@@ -66,6 +68,23 @@ async def get_user(user_id: str = Depends(verify_jwt_token)):
         logger.error(f"get_user | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
     
+
+@router.post("/complete_onboarding")
+async def complete_onboarding(user_id: str = Depends(verify_jwt_token)):
+    try:
+        with Database() as db:
+            result = db.complete_onboarding(user_id)
+
+        return JSONResponse(
+            content={"success": True},
+            status_code=200
+        )
+
+    except Exception as e:
+        logger.error(f"complete_onboarding | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
 @router.post("/get_previews")
 async def get_previews(user_id: str = Depends(verify_jwt_token)):
     try:
@@ -85,6 +104,7 @@ async def get_previews(user_id: str = Depends(verify_jwt_token)):
     except Exception as e:
         logger.error(f"get_previews | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/get_image")
 async def get_image(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -108,6 +128,7 @@ async def get_image(request: Request, user_id: str = Depends(verify_jwt_token)):
     except Exception as e:
         logger.error(f"get_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/get_design")
 async def get_design(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -131,6 +152,7 @@ async def get_design(request: Request, user_id: str = Depends(verify_jwt_token))
     except Exception as e:
         logger.error(f"get_design | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
     
 @router.post("/upload_image")
 async def upload_image(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -175,6 +197,7 @@ async def upload_image(request: Request, user_id: str = Depends(verify_jwt_token
                 detail="Insufficient storage space. Please upgrade to premium for more storage."
             )
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/delete_image")
 async def delete_image(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -204,6 +227,7 @@ async def delete_image(request: Request, user_id: str = Depends(verify_jwt_token
     except Exception as e:
         logger.error(f"delete_image | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/delete_design")
 async def delete_design(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -234,6 +258,7 @@ async def delete_design(request: Request, user_id: str = Depends(verify_jwt_toke
         logger.error(f"delete_design | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
     
+
 @router.post("/design_image")
 async def design_image(request: Request, user_id: str = Depends(verify_jwt_token)):
     try:
@@ -320,6 +345,7 @@ async def design_image(request: Request, user_id: str = Depends(verify_jwt_token
                 detail="Insufficient storage space. Please upgrade to premium for more storage."
             )
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/update_design_fav")
 async def update_design_fav(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -340,6 +366,7 @@ async def update_design_fav(request: Request, user_id: str = Depends(verify_jwt_
     except Exception as e:
         logger.error(f"update_design_fav | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/update_image_fav")
 async def update_image_fav(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -360,6 +387,7 @@ async def update_image_fav(request: Request, user_id: str = Depends(verify_jwt_t
     except Exception as e:
         logger.error(f"update_image_fav | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/submit_feedback")
 async def submit_feedback(request: Request, user_id: str = Depends(verify_jwt_token)):
@@ -388,6 +416,7 @@ async def submit_feedback(request: Request, user_id: str = Depends(verify_jwt_to
     except Exception as e:
         logger.error(f"update_image_fav | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 @router.post("/auth/google")
 async def google_auth(request: Request):
@@ -434,6 +463,7 @@ async def google_auth(request: Request):
     except Exception as e:
         logger.error(f"auth | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+    
 
 async def exchange_code_with_google(code: str, client_id: str, client_secret: str, redirect_uri: str):
     token_url = "https://oauth2.googleapis.com/token"
@@ -454,6 +484,7 @@ async def exchange_code_with_google(code: str, client_id: str, client_secret: st
 
     return response.json()
 
+
 def decode_google_id_token(token: str, client_id: str):
     try:
         id_info = id_token.verify_oauth2_token(
@@ -473,6 +504,7 @@ def decode_google_id_token(token: str, client_id: str):
     except ValueError as e:
         logger.error(f"Auth, decode google id token")
         raise Exception(f"Invalid token: {str(e)}")
+    
 
 def generate_jwt_token(user_id: str):
     secret_key = os.getenv("JWT_SECRET_KEY")
@@ -485,6 +517,7 @@ def generate_jwt_token(user_id: str):
 
     token = jwt.encode(payload, secret_key, algorithm="HS256")
     return token
+
 
 @router.post("/webhooks/subscription_created")
 async def create_subscription_webhook(request: Request):

@@ -1,6 +1,7 @@
 import psycopg2
 import base64
 import calendar
+from datetime import datetime
 from psycopg2 import DatabaseError
 from configparser import ConfigParser
 
@@ -85,7 +86,6 @@ class Database:
                 # Calculate days for cancelled/expired subscriptions
                 days_until_expiry = None
                 days_since_expiry = None
-                from datetime import datetime
                 now = datetime.now()
 
                 if subscription_status == 'cancelled' and subscription_ends_at:

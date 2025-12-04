@@ -83,7 +83,37 @@ async def complete_onboarding(user_id: str = Depends(verify_jwt_token)):
     except Exception as e:
         logger.error(f"complete_onboarding | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
+@router.post("/get_default_previews")
+async def get_default_previews(
+    request: Request,
+    user_id: str = Depends(verify_jwt_token)
+):
+    """Get default clothing previews for onboarding based on gender"""
+    try:
+        body = await request.json()
+        gender = body.get("gender")
+        ids = body.get("ids")  # Optional: specific IDs to fetch
+
+        if not gender:
+            return JSONResponse(
+                content={"error": "Gender required"},
+                status_code=400
+            )
+
+        with Database() as db:
+            previews = db.get_default_previews(gender, ids)
+
+        return JSONResponse(
+            content={"previews": previews},
+            status_code=200
+        )
+
+    except Exception as e:
+        logger.error(f"get_default_previews | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/get_previews")
 async def get_previews(user_id: str = Depends(verify_jwt_token)):

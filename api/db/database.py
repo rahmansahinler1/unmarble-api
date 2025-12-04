@@ -1255,3 +1255,55 @@ class Database:
         except Exception as e:
             self.conn.rollback()
             raise e
+
+    def get_default_previews(self, gender: str, ids: list = None):
+        """
+        Get preview images from defaults table by gender and optional IDs.
+        Used for onboarding clothing selection.
+        """
+        try:
+            if ids:
+                query = """
+                    SELECT id, preview_bytes
+                    FROM defaults
+                    WHERE gender = %s AND id = ANY(%s)
+                    ORDER BY id
+                """
+                self.cursor.execute(query, (gender, ids))
+            else:
+                query = """
+                    SELECT id, preview_bytes
+                    FROM defaults
+                    WHERE gender = %s
+                    ORDER BY id
+                """
+                self.cursor.execute(query, (gender,))
+
+            results = self.cursor.fetchall()
+            return [
+                {"id": row[0], "base64": base64.b64encode(row[1]).decode('utf-8')}
+                for row in results
+            ]
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+
+    def insert_default_image(self, gender: str, image_bytes: bytes, preview_bytes: bytes):
+        """
+        Insert a default image into the defaults table.
+        Used by utility script to populate onboarding images.
+        """
+        query = """
+            INSERT INTO defaults (gender, image_bytes, preview_bytes)
+            VALUES (%s, %s, %s)
+            RETURNING id
+        """
+        try:
+            self.cursor.execute(query, (gender, image_bytes, preview_bytes))
+            result = self.cursor.fetchone()
+            return result[0]
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e

@@ -70,16 +70,49 @@ async def get_user(user_id: str = Depends(verify_jwt_token)):
     
 
 @router.post("/complete_onboarding")
-async def complete_onboarding(user_id: str = Depends(verify_jwt_token)):
+async def complete_onboarding(
+    request: Request,
+    user_id: str = Depends(verify_jwt_token)
+):
+    """
+    Complete onboarding flow:
+    1. Copy default clothing images to user's images table
+    2. Decrement storage_left for each copied image
+    3. Set first_time to false
+
+    Request body:
+    - gender: string (required) - to filter which defaults to copy
+
+    Returns:
+    - success: boolean
+    - storage_left: int (new value after copying)
+    - copied_images: list of {id, base64, faved, created_at}
+    """
     try:
+        data = await request.json()
+        gender = data.get("gender")
+
+        if not gender:
+            raise HTTPException(status_code=400, detail="Gender is required")
+
         with Database() as db:
-            result = db.complete_onboarding(user_id)
+            # Copy defaults to user's images
+            copy_result = db.copy_defaults_to_user(user_id, gender)
+
+            # Mark onboarding as complete
+            db.complete_onboarding(user_id)
 
         return JSONResponse(
-            content={"success": True},
+            content={
+                "success": True,
+                "storage_left": copy_result["storage_left"],
+                "copied_images": copy_result["copied_images"]
+            },
             status_code=200
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"complete_onboarding | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

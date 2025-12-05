@@ -1316,6 +1316,76 @@ class Database:
             self.conn.rollback()
             raise e
 
+    def copy_defaults_to_user(self, user_id, gender: str):
+        """
+        Copy all default images for given gender to user's images table.
+        Uses same image_id (UUID) from defaults table.
+        Category = 'clothing'.
+        Decrements storage_left for each image copied.
+        Returns list of copied image previews for frontend update.
+        """
+        # Get all defaults for gender
+        get_defaults_query = """
+            SELECT image_id, image_bytes, preview_bytes
+            FROM defaults
+            WHERE gender = %s
+        """
+
+        # Insert into images table (uses same UUID)
+        insert_query = """
+            INSERT INTO images (image_id, user_id, category, image_bytes, preview_bytes)
+            VALUES (%s, %s, 'clothing', %s, %s)
+            RETURNING created_at
+        """
+
+        # Decrement storage for all copied images at once
+        decrement_query = """
+            UPDATE users SET storage_left = storage_left - %s
+            WHERE user_id = %s
+            RETURNING storage_left
+        """
+
+        try:
+            self.cursor.execute(get_defaults_query, (gender,))
+            defaults = self.cursor.fetchall()
+
+            if not defaults:
+                return {"copied_images": [], "storage_left": None}
+
+            copied_images = []
+            for row in defaults:
+                image_id, image_bytes, preview_bytes = row
+
+                self.cursor.execute(insert_query, (
+                    image_id,
+                    user_id,
+                    image_bytes,
+                    preview_bytes
+                ))
+                result = self.cursor.fetchone()
+                created_at = result[0]
+
+                copied_images.append({
+                    "id": str(image_id),
+                    "base64": base64.b64encode(preview_bytes).decode('utf-8'),
+                    "faved": False,
+                    "created_at": created_at.isoformat()
+                })
+
+            # Decrement storage_left by number of copied images
+            self.cursor.execute(decrement_query, (len(defaults), user_id))
+            storage_result = self.cursor.fetchone()
+            new_storage_left = storage_result[0] if storage_result else None
+
+            return {
+                "copied_images": copied_images,
+                "storage_left": new_storage_left
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+
     def insert_default_image(self, gender: str, image_bytes: bytes, preview_bytes: bytes):
         """
         Insert a default image into the defaults table.

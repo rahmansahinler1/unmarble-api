@@ -16,3 +16,8 @@ CREATE TABLE defaults (
     preview_bytes BYTEA NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Update default limits
+ALTER TABLE users
+ALTER COLUMN storage_left SET DEFAULT 10,
+ALTER COLUMN designs_left SET DEFAULT 2;

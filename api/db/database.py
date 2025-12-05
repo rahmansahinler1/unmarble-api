@@ -1289,6 +1289,33 @@ class Database:
             self.conn.rollback()
             raise e
 
+    def get_default_image(self, default_id: int):
+        """
+        Get full image bytes and UUID from defaults table by ID.
+        Used for onboarding design generation.
+        Returns dict with image_id (UUID) and image_bytes.
+        """
+        query = """
+            SELECT image_id, image_bytes
+            FROM defaults
+            WHERE id = %s
+        """
+        try:
+            self.cursor.execute(query, (default_id,))
+            result = self.cursor.fetchone()
+
+            if not result:
+                return None
+
+            return {
+                "image_id": str(result[0]),
+                "image_bytes": result[1]
+            }
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+
     def insert_default_image(self, gender: str, image_bytes: bytes, preview_bytes: bytes):
         """
         Insert a default image into the defaults table.

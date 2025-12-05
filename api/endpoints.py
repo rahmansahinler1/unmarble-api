@@ -115,6 +115,108 @@ async def get_default_previews(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/design_onboarding")
+async def design_onboarding(
+    request: Request,
+    user_id: str = Depends(verify_jwt_token)
+):
+    yourself_image_id = None
+    default_clothing_id = None
+
+    try:
+        data = await request.json()
+        yourself_image_id = data.get("yourself_image_id")
+        default_clothing_id = data.get("default_clothing_id")
+
+        if not yourself_image_id or not default_clothing_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Both yourself_image_id and default_clothing_id are required"
+            )
+
+        # Get the user's uploaded image
+        with Database() as db:
+            yourself_image_bytes = bytes(db.get_image(
+                user_id,
+                yourself_image_id
+            ))
+
+            # Get the default clothing image from defaults table
+            default_image = db.get_default_image(default_clothing_id)
+
+            if not default_image:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Default clothing image not found"
+                )
+
+            clothing_image_id = default_image["image_id"]
+            clothing_image_bytes = bytes(default_image["image_bytes"])
+
+        # Generate the design
+        designed_image_bytes = imgf.design_image(
+            yourself_image_bytes,
+            clothing_image_bytes
+        )
+        image_base64 = base64.b64encode(designed_image_bytes).decode('utf-8')
+
+        # Create preview and save to database
+        designed_preview_bytes = imgf.create_preview(designed_image_bytes)
+        with Database() as db:
+            result = db.insert_designed_image(
+                user_id,
+                yourself_image_id,
+                clothing_image_id,
+                designed_image_bytes,
+                designed_preview_bytes
+            )
+
+        return JSONResponse(
+            content={
+                "image_id": result["image_id"],
+                "image_base64": image_base64,
+                "preview_base64": result["preview_base64"],
+                "created_at": result["created_at"],
+                "designs_left": result["designs_left"],
+                "storage_left": result["storage_left"]
+            },
+            status_code=200,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"design_onboarding | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+
+        # Check for content safety violations
+        if "CONTENT_SAFETY_VIOLATION" in str(e):
+            with Database() as db:
+                violation_count = db.increment_nsfw_violation(user_id)
+
+            logger.warning(f"Content safety violation detected | {user_id} | violation count: {violation_count} | yourself_image_id: {yourself_image_id} | default_clothing_id: {default_clothing_id}")
+
+            if violation_count >= 3:
+                error_detail = f"CRITICAL: Content Safety Violation (Strike {violation_count}/3) - Your account is under review for repeated safety violations."
+            elif violation_count == 2:
+                error_detail = f"WARNING: Content Safety Violation (Strike {violation_count}/3) - This is your second violation."
+            else:
+                error_detail = f"Content Safety Violation (Strike {violation_count}/3) - The uploaded images violate our safety policies."
+
+            raise HTTPException(status_code=403, detail=error_detail)
+
+        if "Insufficient design credits" in str(e):
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient design credits. Please upgrade to premium for more designs."
+            )
+        if "Insufficient storage space" in str(e):
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient storage space. Please upgrade to premium for more storage."
+            )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/get_previews")
 async def get_previews(user_id: str = Depends(verify_jwt_token)):
     try:

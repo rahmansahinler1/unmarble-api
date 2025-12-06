@@ -28,17 +28,6 @@ class ImageFunctions:
         PRIMARY OBJECTIVE:
         Combine two images to create a realistic virtual try-on result. Image 1 contains a person. Image 2 contains a clothing item (either standalone or worn by a model).
 
-        SAFETY CONSTRAINTS - STRICTLY ENFORCED:
-        - DO NOT generate nudity, sexual content, or explicit imagery of any kind
-        - DO NOT generate transparent, see-through, or revealing garments
-        - DO NOT generate underwear, lingerie, or swimwear as standalone garments
-        - DO NOT generate suggestive poses, sexualized contexts, or inappropriate scenarios
-        - DO NOT process or generate content that violates content safety policies
-        - All clothing must be appropriate for public, professional settings
-        - If input images contain inappropriate content, REFUSE generation immediately
-        - Maintain strict content safety standards at all times
-        - Generated images must comply with Google's safety policies and community guidelines
-
         CRITICAL RULES - CLOTHING ITEM PRESERVATION:
         1. Extract the clothing item from Image 2 with ABSOLUTE PRECISION
         2. The clothing item must remain COMPLETELY UNCHANGED - no additions, modifications, or alterations to its:
@@ -56,7 +45,7 @@ class ImageFunctions:
         2. Apply intelligent clothing replacement based on garment type:
         - If Image 2 is a TOP (shirt, blouse, sweater, jacket): Replace the existing top, keep bottom garments visible
         - If Image 2 is a BOTTOM (pants, skirt, shorts): Remove existing bottom garments and show appropriate body parts (legs for skirts/shorts, covered legs for pants)
-        - If Image 2 is a DRESS: Replace both top and bottom with the dress, show appropriate body parts
+        - If Image 2 is a DRESS: Replace both top and bottom with the dress, show appropriate body parts. Remove the older clothings, just show the dress.
         - If Image 2 is OUTERWEAR (coat, jacket): Layer over existing clothing or replace top layer
         3. NEVER layer bottoms over existing bottoms (e.g., skirt over jeans is incorrect - remove jeans and show legs)
         4. NEVER keep incompatible clothing visible beneath (e.g., if adding a dress, don't show pants underneath)
@@ -97,6 +86,7 @@ class ImageFunctions:
         - Modifying the person's body, face, or physical features
         - Creating unrealistic clothing layering (visible incompatible garments underneath)
         - Generating low-quality results with: blurry details, distorted proportions, unnatural lighting, poor fabric draping, floating garments, disconnected clothing parts, anatomical errors
+        - Generating same Image in Image 1. With any conditions, try to put clothing item on the given Image 1 and generate new outfit.
 
         FINAL OUTPUT REQUIREMENTS:
         The result must appear as if the person from Image 1 is naturally wearing the exact clothing item from Image 2, with:

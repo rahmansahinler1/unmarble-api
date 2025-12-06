@@ -5,7 +5,7 @@
 -- This allows the same image_id (UUID) to exist for multiple users
 -- (needed when copying default images to user's images table)
 ALTER TABLE images DROP CONSTRAINT images_pkey;
-ALTER TABLE images ADD PRIMARY KEY (user_id, image_id);
+ALTER TABLE images ADD id SERIAL PRIMARY KEY;
 
 -- Step 2: Create defaults table with SERIAL id as primary key and UUID image_id
 CREATE TABLE defaults (

@@ -19,5 +19,5 @@ CREATE TABLE defaults (
 
 -- Update default limits
 ALTER TABLE users
-ALTER COLUMN storage_left SET DEFAULT 10,
+ALTER COLUMN storage_left SET DEFAULT 12,
 ALTER COLUMN designs_left SET DEFAULT 2;

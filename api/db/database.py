@@ -1,22 +1,31 @@
-import psycopg2
+from psycopg2 import pool, DatabaseError
 import base64
 import calendar
+import threading
 from datetime import datetime
-from psycopg2 import DatabaseError
 from configparser import ConfigParser
 
 
 class Database:
-    _instance = None
+    _pool = None
+    _lock = threading.Lock()
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(Database, cls).__new__(cls)
-            cls._instance.db_config = cls._config()
-        return cls._instance
+    @classmethod
+    def _get_pool(cls):
+        """Initialize connection pool once, thread-safe"""
+        if cls._pool is None:
+            with cls._lock:
+                if cls._pool is None:  # Double-check after acquiring lock
+                    config = cls._config()
+                    cls._pool = pool.SimpleConnectionPool(
+                        minconn=1,      # Minimum connections to keep open
+                        maxconn=10,     # Maximum connections (10 concurrent users)
+                        **config
+                    )
+        return cls._pool
 
     def __enter__(self):
-        self.conn = psycopg2.connect(**self.db_config)
+        self.conn = self._get_pool().getconn()
         self.cursor = self.conn.cursor()
         return self
 
@@ -28,8 +37,10 @@ class Database:
                 self.conn.commit()
             else:
                 self.conn.rollback()
-            self.conn.close()
+            # Return connection to pool instead of closing
+            self._get_pool().putconn(self.conn)
 
+    @staticmethod
     def _config(filename="api/db/database.ini", section="postgresql"):
         parser = ConfigParser()
         parser.read(filename)

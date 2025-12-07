@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -320,30 +320,30 @@ async def get_design(request: Request, user_id: str = Depends(verify_jwt_token))
     
     
 @router.post("/upload_image")
-async def upload_image(request: Request, user_id: str = Depends(verify_jwt_token)):
+async def upload_image(
+    file: UploadFile = File(...),
+    category: str = Form(...),
+    user_id: str = Depends(verify_jwt_token)
+):
     try:
-        data = await request.json()
-        category = data.get("category")
-        image_base64 = data.get("imageBase64")
-
-        decoded_bytes = base64.b64decode(image_base64)
+        image_bytes = await file.read()
 
         max_size_bytes = 6 * 1024 * 1024
-        if len(decoded_bytes) > max_size_bytes:
+        if len(image_bytes) > max_size_bytes:
             raise HTTPException(
                 status_code=400,
                 detail="Image file size exceeds 5MB limit"
             )
 
-        preview_bytes = imgf.create_preview(image_bytes=decoded_bytes)
+        preview_bytes = imgf.create_preview(image_bytes=image_bytes)
 
         with Database() as db:
             result = db.insert_image(
                 user_id,
                 category,
-                decoded_bytes,
+                image_bytes,
                 preview_bytes
-                )
+            )
 
         return JSONResponse(
             content={

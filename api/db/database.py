@@ -20,6 +20,8 @@ class Database:
                     cls._pool = pool.SimpleConnectionPool(
                         minconn=1,      # Minimum connections to keep open
                         maxconn=10,     # Maximum connections (10 concurrent users)
+                        connect_timeout=5,  # 5 seconds to establish connection
+                        options='-c statement_timeout=30000',  # 30 seconds max query time
                         **config
                     )
         return cls._pool
@@ -138,9 +140,9 @@ class Database:
             image_bytes,
             preview_bytes
         ):
-        # Check if user has storage space
+        # Check if user has storage space (FOR UPDATE locks row to prevent race condition)
         credit_check_query = """
-        SELECT storage_left FROM users WHERE user_id = %s
+        SELECT storage_left FROM users WHERE user_id = %s FOR UPDATE
         """
 
         insert_query = """
@@ -196,8 +198,9 @@ class Database:
             designed_image_bytes,
             designed_preview_bytes
         ):
+        # FOR UPDATE locks row to prevent race condition on credits
         credit_check_query = """
-        SELECT designs_left, storage_left FROM users WHERE user_id = %s
+        SELECT designs_left, storage_left FROM users WHERE user_id = %s FOR UPDATE
         """
 
         insert_query = """

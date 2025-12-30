@@ -78,7 +78,7 @@ async def complete_onboarding(
     Complete onboarding flow:
     1. Copy default clothing images to user's images table
     2. Decrement storage_left for each copied image
-    3. Set first_time to false
+    3. Set user_status to 'onboarded' (ready for tour)
 
     Request body:
     - gender: string (required) - to filter which defaults to copy
@@ -115,6 +115,34 @@ async def complete_onboarding(
         raise
     except Exception as e:
         logger.error(f"complete_onboarding | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/complete_tour")
+async def complete_tour(user_id: str = Depends(verify_jwt_token)):
+    """
+    Mark gallery tour as completed.
+    Sets user_status to 'active' (fully onboarded).
+
+    This endpoint is called when the user sees the first step of the gallery tour,
+    ensuring they don't see the tour again on subsequent visits.
+
+    Returns:
+    - success: boolean
+    """
+    try:
+        with Database() as db:
+            db.complete_tour(user_id)
+
+        return JSONResponse(
+            content={
+                "success": True
+            },
+            status_code=200
+        )
+
+    except Exception as e:
+        logger.error(f"complete_tour | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

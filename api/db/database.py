@@ -61,7 +61,7 @@ class Database:
         query = """
             SELECT user_name, user_surname, user_email, picture_url, user_type,
                    storage_left, designs_left, last_payment_at, nsfw_violations,
-                   subscription_status, subscription_ends_at, first_time
+                   subscription_status, subscription_ends_at, user_status
             FROM users
             WHERE user_id = %s
         """
@@ -122,7 +122,7 @@ class Database:
                     "subscription_ends_at": subscription_ends_at.isoformat() if subscription_ends_at else None,
                     "days_until_expiry": days_until_expiry,
                     "days_since_expiry": days_since_expiry,
-                    "first_time": result[11]
+                    "user_status": result[11]
                 }
             return None
 
@@ -1246,11 +1246,39 @@ class Database:
     def complete_onboarding(self, user_id):
         """
         Mark user as having completed the onboarding flow.
-        Sets first_time to false.
+        Sets user_status to 'onboarded' (ready for tour).
         """
         query = """
             UPDATE users
-            SET first_time = false
+            SET user_status = 'onboarded'
+            WHERE user_id = %s
+            RETURNING user_id
+        """
+        try:
+            self.cursor.execute(query, (user_id,))
+            result = self.cursor.fetchone()
+
+            if not result:
+                raise Exception(f"User {user_id} not found")
+
+            return {"success": True}
+
+        except DatabaseError as e:
+            self.conn.rollback()
+            raise e
+        except Exception as e:
+            self.conn.rollback()
+            raise e
+
+    def complete_tour(self, user_id):
+        """
+        Mark user as having completed the gallery tour.
+        Sets user_status to 'active' (fully onboarded).
+        Called when user sees the first step of the gallery tour.
+        """
+        query = """
+            UPDATE users
+            SET user_status = 'active'
             WHERE user_id = %s
             RETURNING user_id
         """

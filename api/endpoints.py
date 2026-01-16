@@ -74,20 +74,6 @@ async def complete_onboarding(
     request: Request,
     user_id: str = Depends(verify_jwt_token)
 ):
-    """
-    Complete onboarding flow:
-    1. Copy default clothing images to user's images table
-    2. Decrement storage_left for each copied image
-    3. Set user_status to 'onboarded' (ready for tour)
-
-    Request body:
-    - gender: string (required) - to filter which defaults to copy
-
-    Returns:
-    - success: boolean
-    - storage_left: int (new value after copying)
-    - copied_images: list of {id, base64, faved, created_at}
-    """
     try:
         data = await request.json()
         gender = data.get("gender")
@@ -120,16 +106,6 @@ async def complete_onboarding(
 
 @router.post("/complete_tour")
 async def complete_tour(user_id: str = Depends(verify_jwt_token)):
-    """
-    Mark gallery tour as completed.
-    Sets user_status to 'active' (fully onboarded).
-
-    This endpoint is called when the user sees the first step of the gallery tour,
-    ensuring they don't see the tour again on subsequent visits.
-
-    Returns:
-    - success: boolean
-    """
     try:
         with Database() as db:
             db.complete_tour(user_id)
@@ -151,11 +127,10 @@ async def get_default_previews(
     request: Request,
     user_id: str = Depends(verify_jwt_token)
 ):
-    """Get default clothing previews for onboarding based on gender"""
     try:
         body = await request.json()
         gender = body.get("gender")
-        ids = body.get("ids")  # Optional: specific IDs to fetch
+        ids = body.get("ids")
 
         if not gender:
             return JSONResponse(

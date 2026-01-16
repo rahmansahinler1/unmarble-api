@@ -82,11 +82,8 @@ async def complete_onboarding(
             raise HTTPException(status_code=400, detail="Gender is required")
 
         with Database() as db:
-            # Copy defaults to user's images
             copy_result = db.copy_defaults_to_user(user_id, gender)
-
-            # Mark onboarding as complete
-            db.complete_onboarding(user_id)
+            db.complete_onboarding(user_id, gender)
 
         return JSONResponse(
             content={

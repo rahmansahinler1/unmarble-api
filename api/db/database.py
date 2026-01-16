@@ -1243,19 +1243,16 @@ class Database:
                 "created_at": result[1].isoformat()
             }
 
-    def complete_onboarding(self, user_id):
-        """
-        Mark user as having completed the onboarding flow.
-        Sets user_status to 'onboarded' (ready for tour).
-        """
+    def complete_onboarding(self, user_id, gender):
+        """Mark user as having completed onboarding and set their gender."""
         query = """
             UPDATE users
-            SET user_status = 'onboarded'
+            SET user_status = 'onboarded', user_gender = %s
             WHERE user_id = %s
             RETURNING user_id
         """
         try:
-            self.cursor.execute(query, (user_id,))
+            self.cursor.execute(query, (gender, user_id))
             result = self.cursor.fetchone()
 
             if not result:

@@ -1247,40 +1247,12 @@ class Database:
         """Mark user as having completed onboarding and set their gender."""
         query = """
             UPDATE users
-            SET user_status = 'onboarded', user_gender = %s
+            SET user_status = 'onboarded', gender = %s
             WHERE user_id = %s
             RETURNING user_id
         """
         try:
             self.cursor.execute(query, (gender, user_id))
-            result = self.cursor.fetchone()
-
-            if not result:
-                raise Exception(f"User {user_id} not found")
-
-            return {"success": True}
-
-        except DatabaseError as e:
-            self.conn.rollback()
-            raise e
-        except Exception as e:
-            self.conn.rollback()
-            raise e
-
-    def complete_tour(self, user_id):
-        """
-        Mark user as having completed the gallery tour.
-        Sets user_status to 'active' (fully onboarded).
-        Called when user sees the first step of the gallery tour.
-        """
-        query = """
-            UPDATE users
-            SET user_status = 'active'
-            WHERE user_id = %s
-            RETURNING user_id
-        """
-        try:
-            self.cursor.execute(query, (user_id,))
             result = self.cursor.fetchone()
 
             if not result:

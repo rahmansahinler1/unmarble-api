@@ -101,24 +101,6 @@ async def complete_onboarding(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/complete_tour")
-async def complete_tour(user_id: str = Depends(verify_jwt_token)):
-    try:
-        with Database() as db:
-            db.complete_tour(user_id)
-
-        return JSONResponse(
-            content={
-                "success": True
-            },
-            status_code=200
-        )
-
-    except Exception as e:
-        logger.error(f"complete_tour | {user_id} | {type(e).__name__}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.post("/get_default_previews")
 async def get_default_previews(
     request: Request,

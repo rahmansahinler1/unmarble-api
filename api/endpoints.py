@@ -137,16 +137,33 @@ async def design_onboarding(
 ):
     yourself_image_id = None
     default_clothing_id = None
+    clothing_image_id = None
 
     try:
         data = await request.json()
         yourself_image_id = data.get("yourself_image_id")
         default_clothing_id = data.get("default_clothing_id")
+        clothing_image_id = data.get("clothing_image_id")
 
-        if not yourself_image_id or not default_clothing_id:
+        # Validate that yourself_image_id is provided
+        if not yourself_image_id:
             raise HTTPException(
                 status_code=400,
-                detail="Both yourself_image_id and default_clothing_id are required"
+                detail="yourself_image_id is required"
+            )
+
+        # Validate that EITHER default_clothing_id OR clothing_image_id is provided
+        if not default_clothing_id and not clothing_image_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Either default_clothing_id or clothing_image_id must be provided"
+            )
+
+        # Both cannot be provided
+        if default_clothing_id and clothing_image_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide only one: default_clothing_id or clothing_image_id"
             )
 
         # Get the user's uploaded image
@@ -156,17 +173,26 @@ async def design_onboarding(
                 yourself_image_id
             ))
 
-            # Get the default clothing image from defaults table
-            default_image = db.get_default_image(default_clothing_id)
+            # Fetch clothing based on source
+            if clothing_image_id:
+                # User uploaded their own clothing - fetch from images table
+                clothing_image_bytes = bytes(db.get_image(
+                    user_id,
+                    clothing_image_id
+                ))
+                clothing_id_for_storage = clothing_image_id
+            else:
+                # Using default clothing - fetch from defaults table
+                default_image = db.get_default_image(default_clothing_id)
 
-            if not default_image:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Default clothing image not found"
-                )
+                if not default_image:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Default clothing image not found"
+                    )
 
-            clothing_image_id = default_image["image_id"]
-            clothing_image_bytes = bytes(default_image["image_bytes"])
+                clothing_id_for_storage = default_image["image_id"]
+                clothing_image_bytes = bytes(default_image["image_bytes"])
 
         # Generate the design
         designed_image_bytes = imgf.design_image(
@@ -181,7 +207,7 @@ async def design_onboarding(
             result = db.insert_designed_image(
                 user_id,
                 yourself_image_id,
-                clothing_image_id,
+                clothing_id_for_storage,
                 designed_image_bytes,
                 designed_preview_bytes
             )
@@ -208,7 +234,7 @@ async def design_onboarding(
             with Database() as db:
                 violation_count = db.increment_nsfw_violation(user_id)
 
-            logger.warning(f"Content safety violation detected | {user_id} | violation count: {violation_count} | yourself_image_id: {yourself_image_id} | default_clothing_id: {default_clothing_id}")
+            logger.warning(f"Content safety violation detected | {user_id} | violation count: {violation_count} | yourself_image_id: {yourself_image_id} | default_clothing_id: {default_clothing_id} | clothing_image_id: {clothing_image_id}")
 
             if violation_count >= 3:
                 error_detail = f"CRITICAL: Content Safety Violation (Strike {violation_count}/3) - Your account is under review for repeated safety violations."
